@@ -1,0 +1,142 @@
+name: CI
+
+# Full gate for sentinel-bevy (NEURAL DEFENSE, Rust + Bevy).
+#   cargo fmt --check
+#   cargo clippy -- -D warnings
+#   cargo test
+#   guardrails pattern scan (PREVENT-SB-* rules)
+#   guardrails semantic scan (SEMANTIC-SB-* rules)
+#   placeholder asset reuse check
+# Runs on every push and PR to main so the repo can never go red silently.
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Build + Test + Lint + Guardrails
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Linux system dependencies (audio + graphics)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --locked
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Guardrails pattern scan
+        run: |
+          set -euo pipefail
+          RULES=".guardrails/prevention-rules/pattern-rules.json"
+          if [ ! -f "$RULES" ]; then
+            echo "No pattern-rules.json found, skipping."
+            exit 0
+          fi
+          VIOLATIONS=0
+          # Extract rule patterns and scan all .rs files
+          RULE_IDS=$(jq -r '.rules[] | select(.enabled == true) | "\(.rule_id)\t\(.pattern)\t\(.severity)\t\(.message)"' "$RULES")
+          while IFS=$'\t' read -r rule_id pattern severity message; do
+            [ -z "$rule_id" ] && continue
+            MATCHES=$(grep -rnP "$pattern" --include='*.rs' src/ 2>/dev/null || true)
+            if [ -n "$MATCHES" ]; then
+              echo "$MATCHES" | while IFS= read -r line; do
+                echo "[GUARDRAILS][$severity] $rule_id $line — $message"
+              done
+              VIOLATIONS=$((VIOLATIONS + 1))
+            fi
+          done <<< "$RULE_IDS"
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo ""
+            echo "GUARDRAILS: $VIOLATIONS violation(s) found."
+            exit 1
+          fi
+          echo "GUARDRAILS: pattern scan clean."
+
+      - name: Guardrails semantic scan
+        run: |
+          set -euo pipefail
+          RULES=".guardrails/prevention-rules/semantic-rules.json"
+          if [ ! -f "$RULES" ]; then
+            echo "No semantic-rules.json found, skipping."
+            exit 0
+          fi
+          VIOLATIONS=0
+          # SEMANTIC-SB-001: panic paths in config/setup functions
+          PANIC_IN_SETUP=$(grep -rnP '(unwrap_or_else\s*\(\s*\|\|\s*panic!|panic!\()' --include='*.rs' src/game_setup.rs src/config.rs 2>/dev/null || true)
+          if [ -n "$PANIC_IN_SETUP" ]; then
+            echo "$PANIC_IN_SETUP" | while IFS= read -r line; do
+              echo "[GUARDRAILS][critical] SEMANTIC-SB-001 $line — Panic in config/setup function"
+            done
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+          # SEMANTIC-SB-002: placeholder asset reuse comments
+          PLACEHOLDER=$(grep -rnP '(reuse|placeholder|for now|temporary)[^\n]*(texture|asset|sprite|image|art|mesh)' --include='*.rs' src/ 2>/dev/null || true)
+          if [ -n "$PLACEHOLDER" ]; then
+            echo "$PLACEHOLDER" | while IFS= read -r line; do
+              echo "[GUARDRAILS][warning] SEMANTIC-SB-002 $line — Placeholder asset reuse"
+            done
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+          # SEMANTIC-SB-003: relative file paths
+          RELATIVE_PATHS=$(grep -rnP '(File::open|fs::read_to_string|fs::read)\s*\(\s*"[^/"]' --include='*.rs' src/ 2>/dev/null || true)
+          if [ -n "$RELATIVE_PATHS" ]; then
+            echo "$RELATIVE_PATHS" | while IFS= read -r line; do
+              echo "[GUARDRAILS][error] SEMANTIC-SB-003 $line — Relative file path, use absolute via dirs crate"
+            done
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo ""
+            echo "GUARDRAILS: $VIOLATIONS semantic violation(s) found."
+            exit 1
+          fi
+          echo "GUARDRAILS: semantic scan clean."
+
+      - name: Placeholder asset audit
+        run: |
+          set -euo pipefail
+          # Scan for 'for now' or 'reuse' comments near asset/texture loading
+          PLACEHOLDER_COUNT=$(grep -rnP '(reuse.*for now|placeholder.*for now|temporary.*texture|TODO.*texture|TODO.*asset|TODO.*art)' --include='*.rs' src/ 2>/dev/null | wc -l || echo "0")
+          if [ "$PLACEHOLDER_COUNT" -gt "0" ]; then
+            echo "[GUARDRAILS][warning] Found $PLACEHOLDER_COUNT placeholder asset comment(s) — replace with dedicated assets or add tracking issues."
+            grep -rnP '(reuse.*for now|placeholder.*for now|temporary.*texture|TODO.*texture|TODO.*asset|TODO.*art)' --include='*.rs' src/
+            exit 1
+          fi
+          echo "Placeholder asset audit clean."

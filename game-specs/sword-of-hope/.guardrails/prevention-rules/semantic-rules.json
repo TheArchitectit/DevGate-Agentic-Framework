@@ -1,0 +1,75 @@
+{
+  "$schema": "./semantic-rules.schema.json",
+  "description": "Semantic/AST-based prevention rules for Sword of Hope — Godot 4 GDScript (273 files, ~52K LOC)",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "SEMANTIC-SOH-001",
+      "name": "Duplicate function definitions across directories",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "FunctionDefinition",
+        "check": "duplicate_name_across_directories",
+        "exclude": ["_ready", "_process", "_physics_process", "_init", "_enter_tree", "_exit_tree", "_input", "_unhandled_input"]
+      },
+      "message": "Function with same name defined in multiple directories — parallel implementations cause confusion",
+      "severity": "error",
+      "suggestion": "Consolidate to a single implementation in a shared module; delete the duplicate"
+    },
+    {
+      "rule_id": "SEMANTIC-SOH-002",
+      "name": "AudioStreamPlayer node with null stream",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "NodeProperty",
+        "node_type": "AudioStreamPlayer*",
+        "property": "stream",
+        "check": "is_null"
+      },
+      "message": "AudioStreamPlayer has null stream — no audio will play",
+      "severity": "error",
+      "suggestion": "Assign a valid AudioStream resource: $AudioStreamPlayer.stream = preload('res://assets/audio/sfx.ogg')"
+    },
+    {
+      "rule_id": "SEMANTIC-SOH-003",
+      "name": "Texture reference to missing file",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "Assignment",
+        "check": "texture_file_exists"
+      },
+      "message": "Texture path references a file that does not exist in the project",
+      "severity": "warning",
+      "suggestion": "Verify the .png/.webp file exists at the res:// path, or add the missing asset"
+    },
+    {
+      "rule_id": "SEMANTIC-SOH-004",
+      "name": "Large function complexity (52K LOC codebase risk)",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "FunctionDefinition",
+        "check": "cyclomatic_complexity > 15"
+      },
+      "message": "Function has high cyclomatic complexity — hard to maintain in a 52K LOC codebase",
+      "severity": "info",
+      "suggestion": "Extract branches into helper functions; consider a state machine for complex logic"
+    },
+    {
+      "rule_id": "SEMANTIC-SOH-005",
+      "name": "Class defined but never referenced outside its directory",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "ClassName",
+        "check": "no_external_references"
+      },
+      "message": "class_name declared but never referenced outside its own directory — possible orphaned code",
+      "severity": "info",
+      "suggestion": "Verify the class is still needed; if part of a deprecated system, remove it"
+    }
+  ]
+}

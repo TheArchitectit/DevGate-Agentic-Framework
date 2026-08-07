@@ -1,0 +1,74 @@
+name: CI — rjl-zombie-plains (Robo-Z)
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Build + Test + Guardrails
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Build (tsc)
+        run: npm run build
+
+      - name: Test (vitest)
+        run: npx vitest run --reporter=verbose
+
+      - name: Guardrails scan
+        run: |
+          echo "Running pattern-rules scan..."
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+            const rules = JSON.parse(fs.readFileSync('.guardrails/prevention-rules/pattern-rules.json', 'utf8'));
+            let violations = 0;
+            for (const rule of rules.rules) {
+              if (!rule.enabled) continue;
+              const regex = new RegExp(rule.pattern, 'gi');
+              const files = [];
+              function walk(dir) {
+                for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                  const full = path.join(dir, entry.name);
+                  if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') walk(full);
+                  else if (entry.isFile() && /\.(ts|tsx|js)$/.test(entry.name)) files.push(full);
+                }
+              }
+              walk('src');
+              for (const file of files) {
+                const content = fs.readFileSync(file, 'utf8');
+                if (regex.test(content)) {
+                  const ctx = rule.forbidden_context ? new RegExp(rule.forbidden_context, 'i') : null;
+                  if (ctx && ctx.test(content)) continue;
+                  console.error('VIOLATION: ' + rule.rule_id + ' in ' + file + ' — ' + rule.message);
+                  violations++;
+                }
+                regex.lastIndex = 0;
+              }
+            }
+            if (violations > 0) { console.error('Total violations: ' + violations); process.exit(1); }
+            console.log('Guardrails scan passed — no violations.');
+          "

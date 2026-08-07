@@ -1,0 +1,62 @@
+{
+  "$schema": "https://pi-megacompact/guardrails/pattern-rules.schema.json",
+  "description": "Pattern-based prevention rules for GlitchDungeon — Godot 4 GDScript regression detection (35 files)",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "PREVENT-GD-001",
+      "name": "Non-deterministic seed using wall-clock time",
+      "enabled": true,
+      "pattern": "Time\\.get_unix_time_from_system\\(\\).*seed|seed.*Time\\.get_unix_time_from_system\\(\\)",
+      "forbidden_context": "(test|spec|mock|debug)",
+      "message": "Daily dungeon seed uses wall-clock time — non-deterministic, all players get different dungeons",
+      "severity": "critical",
+      "file_glob": ["*.gd"],
+      "suggestion": "Use deterministic date-based seed: var seed: int = hash('%d-%02d-%02d' % [year, month, day])"
+    },
+    {
+      "rule_id": "PREVENT-GD-002",
+      "name": "Texture shared between NPC and enemy scenes",
+      "enabled": true,
+      "pattern": "texture.*=.*res://.*skeleton|texture.*=.*res://.*enemy",
+      "forbidden_context": "(test|spec)",
+      "message": "NPC scene references enemy texture — visual confusion for players",
+      "severity": "warning",
+      "file_glob": ["*shopkeeper*.tscn", "*npc*.tscn", "*vendor*.tscn"],
+      "suggestion": "Create dedicated NPC sprites; do not reuse enemy textures for friendly NPCs"
+    },
+    {
+      "rule_id": "PREVENT-GD-003",
+      "name": "AudioStreamPlayer without stream resource",
+      "enabled": true,
+      "pattern": "(AudioStreamPlayer(2D|3D)?|play\\(\\))(?!.*stream)",
+      "forbidden_context": "(test|spec|mock)",
+      "message": "AudioStreamPlayer node may have null stream — no audio files found in project",
+      "severity": "error",
+      "file_glob": ["*.tscn", "*.gd"],
+      "suggestion": "Create assets/audio/ directory and assign stream: $AudioStreamPlayer.stream = preload('res://assets/audio/sfx.ogg')"
+    },
+    {
+      "rule_id": "PREVENT-GD-004",
+      "name": "Time.get_unix_time_from_system() in game logic",
+      "enabled": true,
+      "pattern": "Time\\.get_unix_time_from_system\\(\\)",
+      "forbidden_context": "(#.*debug|analytics|telemetry|test|spec)",
+      "message": "Time.get_unix_time_from_system() returns non-deterministic wall-clock time — use deterministic alternatives",
+      "severity": "critical",
+      "file_glob": ["*.gd"],
+      "suggestion": "Use Time.get_date_dict_from_system() for daily seeds, or Engine.get_process_frames() for timing"
+    },
+    {
+      "rule_id": "PREVENT-GD-005",
+      "name": "Hardcoded enemy stats instead of Resource files",
+      "enabled": true,
+      "pattern": "(hp|health|damage|attack)\\s*=\\s*\\d+",
+      "forbidden_context": "(const|@export|Resource|test|spec|\\.tres)",
+      "message": "Hardcoded enemy stat — use Resource (.tres) files for data-driven enemy definitions",
+      "severity": "info",
+      "file_glob": ["*enemy*.gd", "*skeleton*.gd"],
+      "suggestion": "Create EnemyStats resource: var stats: EnemyStats = preload('res://resources/enemies/skeleton.tres')"
+    }
+  ]
+}

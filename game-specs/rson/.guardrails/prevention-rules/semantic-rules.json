@@ -1,0 +1,105 @@
+{
+  "$schema": "./semantic-rules.schema.json",
+  "description": "Semantic/AST-based prevention rules for Neon Survivors (RSON) — Godot 4.6 GDScript",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "SEMANTIC-RSON-001",
+      "name": "Function defined but never called (dead code)",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "FunctionDefinition",
+        "check": "no_call_sites",
+        "exclude": ["_ready", "_process", "_physics_process", "_init", "_enter_tree", "_exit_tree", "_input", "_unhandled_input", "_draw", "_get_configuration_warnings", "_to_string"]
+      },
+      "message": "Function is defined but never called or connected to a signal — dead code",
+      "severity": "warning",
+      "suggestion": "Either call the function, connect it to a signal, or remove it. Add # @internal if intentionally public API."
+    },
+    {
+      "rule_id": "SEMANTIC-RSON-002",
+      "name": "Signal declared but never emitted",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "SignalDeclaration",
+        "check": "no_emit_sites"
+      },
+      "message": "Signal is declared but never emitted — no code path fires this signal",
+      "severity": "warning",
+      "suggestion": "Add signal_name.emit() at the appropriate state transition, or remove the declaration"
+    },
+    {
+      "rule_id": "SEMANTIC-RSON-003",
+      "name": "Node instantiated but never added to scene tree",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "Assignment",
+        "check": "new_node_without_add_child",
+        "pattern": "var \\w+ = \\w+\\.new\\(\\)"
+      },
+      "message": "Node created with .new() but never add_child()ed — _ready() will never fire, signals won't connect",
+      "severity": "error",
+      "suggestion": "Call add_child(node) after instantiation, or instantiate via preload().instantiate() and add_child()"
+    },
+    {
+      "rule_id": "SEMANTIC-RSON-004",
+      "name": "Per-frame group query without caching",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "CallExpression",
+        "callee": "get_nodes_in_group",
+        "parent": "FunctionDefinition[name in (_process, _physics_process)]"
+      },
+      "message": "get_nodes_in_group() called in _process/_physics_process — O(N) scene tree traversal every frame",
+      "severity": "error",
+      "suggestion": "Cache in _ready() and update via group signals, or use a singleton enemy registry"
+    },
+    {
+      "rule_id": "SEMANTIC-RSON-005",
+      "name": "Unreachable branch in stage-gated boss logic",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "IfStatement",
+        "check": "unreachable_branch",
+        "context": "boss_attack"
+      },
+      "message": "Boss attack branch is unreachable due to stage check condition — logic error in gating",
+      "severity": "error",
+      "suggestion": "Verify stage variable values and comparison operators; add test coverage for each stage"
+    },
+    {
+      "rule_id": "SEMANTIC-RSON-006",
+      "name": "Save function without encryption",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "CallExpression",
+        "callee": "store_string",
+        "argument_contains": "JSON.stringify",
+        "missing": "encrypt"
+      },
+      "message": "Save function writes plain-text JSON without encryption — game state is unprotected",
+      "severity": "critical",
+      "suggestion": "Use FileAccess.open_encrypted_with_pass() or Marshalls.variant_to_base64() with a key"
+    },
+    {
+      "rule_id": "SEMANTIC-RSON-007",
+      "name": "Per-shot node allocation (PointLight2D, SceneTreeTimer)",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "CallExpression",
+        "callee": "create_timer",
+        "parent": "FunctionDefinition[name in (shoot, fire, spawn_projectile, _on_shoot)]"
+      },
+      "message": "SceneTreeTimer or node allocated per-shot — causes GC pressure and visual flicker",
+      "severity": "warning",
+      "suggestion": "Use object pooling for projectiles; pre-allocate PointLight2D instances and toggle visibility"
+    }
+  ]
+}

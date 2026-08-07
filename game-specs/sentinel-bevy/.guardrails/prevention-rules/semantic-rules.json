@@ -1,0 +1,69 @@
+{
+  "$schema": "https://devgate/guardrails/semantic-rules.schema.json",
+  "description": "Semantic/AST-based prevention rules for sentinel-bevy (NEURAL DEFENSE, Rust + Bevy) — complex regression patterns from deep code review",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "SEMANTIC-SB-001",
+      "name": "Rust: panic in config loading path",
+      "enabled": true,
+      "language": "rust",
+      "ast_pattern": {
+        "type": "FunctionDefinition",
+        "name_contains_any": ["load", "setup", "init", "config", "ron"],
+        "body_contains_any": ["unwrap_or_else", "panic!", "unwrap()"],
+        "context_not_contains": "cfg(test)"
+      },
+      "message": "Config/setup function contains panic path — missing or malformed files will crash the game. Return Result and handle gracefully.",
+      "severity": "critical",
+      "suggestion": "Change load_ron_file to return Result<Config, LoadError> and propagate errors to a fallback screen."
+    },
+    {
+      "rule_id": "SEMANTIC-SB-002",
+      "name": "Rust: Asset handle reuse across enemy types",
+      "enabled": true,
+      "language": "rust",
+      "ast_pattern": {
+        "type": "AssignmentExpression",
+        "check": "same_asset_handle_assigned_to_different_entity_types",
+        "context_contains_any": ["texture", "sprite", "mesh", "image", "material"]
+      },
+      "message": "Same asset handle assigned to different enemy types — enemies are visually indistinguishable. Load dedicated assets per type.",
+      "severity": "warning",
+      "suggestion": "Load a separate texture for each enemy type, or use an enum + match to select distinct assets."
+    },
+    {
+      "rule_id": "SEMANTIC-SB-003",
+      "name": "Rust: Relative path literal in file open without absolute resolution",
+      "enabled": true,
+      "language": "rust",
+      "ast_pattern": {
+        "type": "CallExpression",
+        "callee": ["File::open", "File::create", "fs::read_to_string", "fs::read"],
+        "argument": {
+          "type": "StringLiteral",
+          "check": "relative_path"
+        },
+        "missing": "current_exe|config_dir|data_dir"
+      },
+      "message": "File operation with relative path resolves against CWD. Use absolute paths from dirs crate for config/assets.",
+      "severity": "error",
+      "suggestion": "Build paths from dirs::config_dir().join(\"sentinel-bevy\").join(\"game.ron\") or current_exe().parent()."
+    },
+    {
+      "rule_id": "SEMANTIC-SB-004",
+      "name": "Rust: Bevy system with unwrap() on resource query",
+      "enabled": true,
+      "language": "rust",
+      "ast_pattern": {
+        "type": "FunctionDefinition",
+        "decorator_contains": ["system"],
+        "body_contains": ".unwrap()",
+        "context_not_contains": "cfg(test)"
+      },
+      "message": "unwrap() on Bevy resource/query in a system will panic if the resource is missing. Use Res<T> with proper error handling.",
+      "severity": "warning",
+      "suggestion": "Accept the resource as Res<T> (returns None if absent) or use Option<Res<T>> and handle the None case."
+    }
+  ]
+}

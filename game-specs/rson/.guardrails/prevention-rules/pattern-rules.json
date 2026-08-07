@@ -1,0 +1,95 @@
+{
+  "$schema": "https://pi-megacompact/guardrails/pattern-rules.schema.json",
+  "description": "Pattern-based prevention rules for Neon Survivors (RSON) — Godot 4.6 GDScript regression detection",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "PREVENT-RSON-001",
+      "name": "Boss attack stage condition without test coverage",
+      "enabled": true,
+      "pattern": "if.*stage.*[<>=!]+.*\\d+.*\\n.*boss.*(attack|phase|state)",
+      "forbidden_context": "(test|spec|assert)",
+      "message": "Boss attack logic gated on stage check — verify all branches are reachable with test coverage",
+      "severity": "error",
+      "file_glob": ["*.gd"],
+      "suggestion": "Add unit test verifying each stage value triggers the correct boss attack branch"
+    },
+    {
+      "rule_id": "PREVENT-RSON-002",
+      "name": "Time.get_ticks_msec() used for game logic timing",
+      "enabled": true,
+      "pattern": "Time\\.get_ticks_msec\\(\\)",
+      "forbidden_context": "(#.*debug|#.*profiling|Engine\\.get_process_frames)",
+      "message": "Time.get_ticks_msec() advances during pause — use pause-aware time source for game logic",
+      "severity": "critical",
+      "file_glob": ["*.gd"],
+      "suggestion": "Use Engine.get_process_frames() or a custom GameManager clock that pauses with SceneTree.paused"
+    },
+    {
+      "rule_id": "PREVENT-RSON-003",
+      "name": "Ad/IAP function returns without logging on failure",
+      "enabled": true,
+      "pattern": "(func\\s+(show_interstitial|show_rewarded|purchase|restore_purchases).*\\n[^}]*return\\s+(false|null))",
+      "forbidden_context": "(push_warning|push_error|print|printerr|logger)",
+      "message": "Ad/IAP function returns false/null without logging — monetization failures will be invisible",
+      "severity": "warning",
+      "file_glob": ["*.gd"],
+      "suggestion": "Add push_warning('AdMob: interstitial failed because...') before every return false/null in ad functions"
+    },
+    {
+      "rule_id": "PREVENT-RSON-004",
+      "name": "IAP node instantiated but not added to scene tree",
+      "enabled": true,
+      "pattern": "(\\w+\\.new\\(\\))(?!.*add_child)",
+      "forbidden_context": "(add_child|is_inside_tree|test|spec|mock)",
+      "message": "Node instantiated with .new() but never add_child()ed — signals and _ready() will never fire",
+      "severity": "error",
+      "file_glob": ["*iap*.gd", "*purchase*.gd", "*admob*.gd"],
+      "suggestion": "Call add_child(node) in _ready() or use @onready + scene instantiation"
+    },
+    {
+      "rule_id": "PREVENT-RSON-005",
+      "name": "Plain-text JSON save without encryption",
+      "enabled": true,
+      "pattern": "(FileAccess\\.open.*[\"']w[\"']|store_string.*JSON\\.stringify|JSON\\.stringify.*store_string)",
+      "forbidden_context": "(encrypt|pack|Marshalls|FileAccess\\..Encrypt|Crypto|hash|AES)",
+      "message": "Save file written as plain-text JSON — game state is unprotected and trivially editable",
+      "severity": "critical",
+      "file_glob": ["*save*.gd", "*persist*.gd", "*game*.gd"],
+      "suggestion": "Use FileAccess with encryption key, or Marshalls.variant_to_base64() with a salted key"
+    },
+    {
+      "rule_id": "PREVENT-RSON-006",
+      "name": "get_nodes_in_group() called in _process or _physics_process",
+      "enabled": true,
+      "pattern": "(_process|_physics_process)[\\s\\S]{0,300}get_nodes_in_group\\(",
+      "forbidden_context": "(#.*cache|_ready|_enter_tree)",
+      "message": "get_nodes_in_group() called per-frame — traverses entire scene tree every frame, causes O(N) overhead",
+      "severity": "error",
+      "file_glob": ["*.gd"],
+      "suggestion": "Cache the group result in _ready() and update via group_added/group_removed signals, or use a manager singleton"
+    },
+    {
+      "rule_id": "PREVENT-RSON-007",
+      "name": "Node allocation per-shot (PointLight2D, SceneTreeTimer)",
+      "enabled": true,
+      "pattern": "(PointLight2D\\.new\\(\\)|get_tree\\(\\)\\.create_timer)",
+      "forbidden_context": "(pool|cache|_ready|preload|test|spec)",
+      "message": "Node or timer allocated per-shot — causes GC pressure and potential visual flicker; use object pooling",
+      "severity": "warning",
+      "file_glob": ["*projectile*.gd", "*weapon*.gd", "*shoot*.gd", "*bullet*.gd"],
+      "suggestion": "Pre-allocate a pool of projectile/light nodes in _ready() and reuse via visible=true/false"
+    },
+    {
+      "rule_id": "PREVENT-RSON-008",
+      "name": "Time.get_unix_time_from_system() in game logic",
+      "enabled": true,
+      "pattern": "Time\\.get_unix_time_from_system\\(\\)",
+      "forbidden_context": "(#.*debug|analytics|telemetry|test)",
+      "message": "Time.get_unix_time_from_system() returns wall-clock time — non-deterministic and pause-unaware",
+      "severity": "critical",
+      "file_glob": ["*.gd"],
+      "suggestion": "Use Engine.get_process_frames(), a custom game clock, or deterministic date-based seed"
+    }
+  ]
+}

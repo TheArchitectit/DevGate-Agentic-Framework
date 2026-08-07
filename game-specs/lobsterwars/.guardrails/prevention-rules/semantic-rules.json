@@ -1,0 +1,87 @@
+{
+  "$schema": "./semantic-rules.schema.json",
+  "description": "Semantic/AST-based prevention rules for LobsterWars — TypeScript + Phaser + Matter.js",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "SEMANTIC-LW-001",
+      "name": "Server handler reading client input without validation",
+      "enabled": true,
+      "language": "typescript",
+      "ast_pattern": {
+        "type": "MethodDefinition",
+        "decorator": "Handler|OnMessage|OnEvent",
+        "param": "input|data|payload|message",
+        "check": "no_validation_before_use"
+      },
+      "message": "Server message handler uses client input fields without server-side validation — trust boundary violation",
+      "severity": "critical",
+      "suggestion": "Validate all client-sent values server-side: type, range, sanity. Never trust client gameplay values."
+    },
+    {
+      "rule_id": "SEMANTIC-LW-002",
+      "name": "WebSocket connection without auth middleware",
+      "enabled": true,
+      "language": "typescript",
+      "ast_pattern": {
+        "type": "CallExpression",
+        "callee": { "property": "on", "object": "io|server|socket" },
+        "arguments": ["\"connection\"", "callback"],
+        "check": "callback_has_auth_verification"
+      },
+      "message": "WebSocket 'connection' handler does not verify authentication token — unauthenticated access",
+      "severity": "critical",
+      "suggestion": "Add auth middleware: verify JWT/session token before accepting connection. Use socket.io middleware or handleUpgrade auth."
+    },
+    {
+      "rule_id": "SEMANTIC-LW-003",
+      "name": "setTimeout in game physics context",
+      "enabled": true,
+      "language": "typescript",
+      "ast_pattern": {
+        "type": "CallExpression",
+        "callee": { "name": "setTimeout" },
+        "scope": "GameRoom|Projectile|physics|combat",
+        "check": "in_game_logic_not_ui"
+      },
+      "message": "setTimeout used in game physics/logic context — timing-based resolution instead of simulation",
+      "severity": "critical",
+      "suggestion": "Replace setTimeout-based projectile resolution with per-frame physics step in the game loop"
+    },
+    {
+      "rule_id": "SEMANTIC-LW-004",
+      "name": "Matter.js body without collisionFilter",
+      "enabled": true,
+      "language": "typescript",
+      "ast_pattern": {
+        "type": "CallExpression",
+        "callee": {
+          "type": "MemberExpression",
+          "object": { "property": "Bodies" },
+          "property": { "name": "rectangle|circle|polygon" }
+        },
+        "missing_property": "collisionFilter"
+      },
+      "message": "Matter.js body created without collisionFilter — uncontrolled collision behavior",
+      "severity": "warning",
+      "suggestion": "Add collisionFilter: { category: CATEGORY_PLAYER, mask: CATEGORY_ENEMY | CATEGORY_WALL } to each body"
+    },
+    {
+      "rule_id": "SEMANTIC-LW-005",
+      "name": "In-memory Map/Set for room state without persistence",
+      "enabled": true,
+      "language": "typescript",
+      "ast_pattern": {
+        "type": "VariableDeclaration",
+        "declarator": {
+          "init": "new Map|new Set|[]|{}"
+        },
+        "name_pattern": "rooms|queue|matches|lobby|sessions",
+        "check": "no_persistence_layer"
+      },
+      "message": "Room/match state stored in plain Map/Set — lost on server restart",
+      "severity": "error",
+      "suggestion": "Use Redis adapter (socket.io-redis-adapter) or database for room state persistence and horizontal scaling"
+    }
+  ]
+}

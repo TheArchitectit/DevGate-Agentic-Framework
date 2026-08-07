@@ -1,0 +1,155 @@
+name: CI
+
+# Full gate for BiteClub (Rust + Bevy 0.14).
+#   cargo fmt --check
+#   cargo clippy -- -D warnings
+#   cargo test
+#   guardrails pattern scan (PREVENT-BC-* rules)
+#   guardrails semantic scan (SEMANTIC-BC-* rules)
+#   README config drift check
+# Runs on every push and PR to main so the repo can never go red silently.
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Build + Test + Lint + Guardrails
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Add WASM target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Linux system dependencies (audio + graphics)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build (native)
+        run: cargo build --locked
+
+      - name: Build (WASM)
+        run: cargo build --target wasm32-unknown-unknown --locked
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Guardrails pattern scan
+        run: |
+          set -euo pipefail
+          RULES=".guardrails/prevention-rules/pattern-rules.json"
+          if [ ! -f "$RULES" ]; then
+            echo "No pattern-rules.json found, skipping."
+            exit 0
+          fi
+          VIOLATIONS=0
+          # Extract rule patterns and scan all .rs files
+          RULE_IDS=$(jq -r '.rules[] | select(.enabled == true) | "\(.rule_id)\t\(.pattern)\t\(.severity)\t\(.message)"' "$RULES")
+          while IFS=$'\t' read -r rule_id pattern severity message; do
+            [ -z "$rule_id" ] && continue
+            MATCHES=$(grep -rnP "$pattern" --include='*.rs' src/ 2>/dev/null || true)
+            if [ -n "$MATCHES" ]; then
+              echo "$MATCHES" | while IFS= read -r line; do
+                echo "[GUARDRAILS][$severity] $rule_id $line — $message"
+              done
+              VIOLATIONS=$((VIOLATIONS + 1))
+            fi
+          done <<< "$RULE_IDS"
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo ""
+            echo "GUARDRAILS: $VIOLATIONS violation(s) found."
+            exit 1
+          fi
+          echo "GUARDRAILS: pattern scan clean."
+
+      - name: Guardrails semantic scan
+        run: |
+          set -euo pipefail
+          RULES=".guardrails/prevention-rules/semantic-rules.json"
+          if [ ! -f "$RULES" ]; then
+            echo "No semantic-rules.json found, skipping."
+            exit 0
+          fi
+          # Semantic rules require AST analysis — run a heuristic check for
+          # the most impactful patterns using ripgrep.
+          VIOLATIONS=0
+          # SEMANTIC-BC-001/007: HashMap/HashSet/Vec::new() in system functions
+          SYS_ALLOC=$(grep -rnP '(HashMap|HashSet|Vec)::new\(\)' --include='*.rs' src/ 2>/dev/null || true)
+          if [ -n "$SYS_ALLOC" ]; then
+            echo "$SYS_ALLOC" | while IFS= read -r line; do
+              echo "[GUARDRAILS][warning] SEMANTIC-BC-001/007 $line — Collection allocation in system, use Local<T> cache"
+            done
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+          # SEMANTIC-BC-002: empty cfg wasm32 function bodies
+          EMPTY_WASM=$(grep -rnP '#\[cfg\(target_arch = "wasm32"\)\]' --include='*.rs' src/ -A5 2>/dev/null | grep -P 'fn\s+\w+.*\{\s*\}' || true)
+          if [ -n "$EMPTY_WASM" ]; then
+            echo "$EMPTY_WASM" | while IFS= read -r line; do
+              echo "[GUARDRAILS][error] SEMANTIC-BC-002 $line — Empty WASM function body"
+            done
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo ""
+            echo "GUARDRAILS: $VIOLATIONS semantic violation(s) found."
+            exit 1
+          fi
+          echo "GUARDRAILS: semantic scan clean."
+
+      - name: README config drift check
+        run: |
+          set -euo pipefail
+          # Extract armed_count from config.rs
+          SRC_VAL=$(grep -oP 'armed_count\s*[:=]\s*\K\d+' src/config.rs 2>/dev/null || echo "NOT_FOUND")
+          # Extract armed_count from README.md
+          README_VAL=$(grep -oP 'armed_count\s*[:=]?\s*\K\d+' README.md 2>/dev/null || echo "NOT_FOUND")
+          if [ "$SRC_VAL" != "NOT_FOUND" ] && [ "$README_VAL" != "NOT_FOUND" ]; then
+            if [ "$SRC_VAL" != "$README_VAL" ]; then
+              echo "[GUARDRAILS][error] PREVENT-BC-007 — config.rs armed_count=$SRC_VAL but README.md says $README_VAL"
+              exit 1
+            fi
+          fi
+          echo "GUARDRAILS: README config drift check clean."
+
+      - name: Build WASM (verify audio stubs are tracked)
+        run: |
+          # Verify no new empty wasm32 function bodies were introduced
+          EMPTY_COUNT=$(grep -rnP '#\[cfg\(target_arch = "wasm32"\)\]' --include='*.rs' src/ -A5 2>/dev/null | grep -cP 'fn\s+\w+.*\{\s*\}' || echo "0")
+          if [ "$EMPTY_COUNT" -gt "0" ]; then
+            echo "[GUARDRAILS][error] $EMPTY_COUNT empty WASM function body/bodies found — add implementations or todo!()"
+            exit 1
+          fi
+          echo "WASM stub check clean."

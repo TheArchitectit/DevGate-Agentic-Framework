@@ -1,0 +1,77 @@
+{
+  "$schema": "./semantic-rules.schema.json",
+  "description": "Semantic/AST-based prevention rules for ctrl-alt-defeat — Godot 4 card game prototype (15 files)",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "SEMANTIC-CAD-001",
+      "name": "Hardcoded enemy data instead of Resource",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "DictionaryLiteral",
+        "check": "hardcoded_enemy_stats",
+        "fields": ["hp", "damage", "name"]
+      },
+      "message": "Enemy stats hardcoded in script — use Resource files for data-driven design and easy expansion",
+      "severity": "info",
+      "suggestion": "Create EnemyStats resource (.tres) files: var stats: EnemyStats = preload('res://resources/enemies/goblin.tres')"
+    },
+    {
+      "rule_id": "SEMANTIC-CAD-002",
+      "name": "Combat end signal without reward handler connection",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "SignalDeclaration",
+        "name": "combat_end",
+        "check": "no_connections_to_reward_handler"
+      },
+      "message": "combat_end signal has no reward handler — victories give no loot, XP, or currency",
+      "severity": "error",
+      "suggestion": "Connect combat_end to a reward handler: combat_end.connect(_on_combat_end_rewards)"
+    },
+    {
+      "rule_id": "SEMANTIC-CAD-003",
+      "name": "Card array with fewer than 20 entries",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "ArrayLiteral",
+        "check": "element_count < 20",
+        "context": "card_database"
+      },
+      "message": "Card database has fewer than 20 cards — insufficient for gameplay testing",
+      "severity": "warning",
+      "suggestion": "Add more card definitions as Resource files; minimum 20 unique cards before testing"
+    },
+    {
+      "rule_id": "SEMANTIC-CAD-004",
+      "name": "Prototype stub without sprint tracking",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "CommentOrString",
+        "check": "contains_stub_without_ticket",
+        "keywords": ["stub", "placeholder", "temporary", "hack", "prototype"]
+      },
+      "message": "Prototype/stub code without TODO or sprint reference — will be forgotten and ship as-is",
+      "severity": "info",
+      "suggestion": "Add TODO(Sprint-7): or FIXME(#123) to track when prototype code should be replaced"
+    },
+    {
+      "rule_id": "SEMANTIC-CAD-005",
+      "name": "Direct scene change without SceneManager",
+      "enabled": true,
+      "language": "gdscript",
+      "ast_pattern": {
+        "type": "CallExpression",
+        "callee": "change_scene",
+        "missing": "SceneManager"
+      },
+      "message": "Direct get_tree().change_scene() call without SceneManager autoload — no progression tracking",
+      "severity": "warning",
+      "suggestion": "Create SceneManager autoload with transition management and progression state"
+    }
+  ]
+}

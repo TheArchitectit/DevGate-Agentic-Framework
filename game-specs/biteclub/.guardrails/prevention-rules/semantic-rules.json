@@ -1,0 +1,115 @@
+{
+  "$schema": "https://devgate/guardrails/semantic-rules.schema.json",
+  "description": "Semantic/AST-based prevention rules for BiteClub (Rust + Bevy 0.14) — complex regression patterns from deep code review",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "SEMANTIC-BC-001",
+      "name": "Rust: HashMap/HashSet allocation inside Bevy system without local cache",
+      "enabled": true,
+      "language": "rust",
+      "ast_pattern": {
+        "type": "FunctionDefinition",
+        "decorator_contains": ["system", "bevy"],
+        "body_contains": "HashMap::new()",
+        "missing": "Local"
+      },
+      "message": "HashMap::new() inside a Bevy system allocates every frame. Use Local<HashMap<...>> to cache the allocation across frames.",
+      "severity": "warning",
+      "suggestion": "Add `mut cache: Local<HashMap<Entity, Vec2>>` as a system parameter and .clear() it each frame instead of allocating new."
+    },
+    {
+      "rule_id": "SEMANTIC-BC-002",
+      "name": "Rust: cfg target_arch wasm32 function with empty body",
+      "enabled": true,
+      "language": "rust",
+      "ast_pattern": {
+        "type": "FunctionDefinition",
+        "attribute": "cfg(target_arch = \"wasm32\")",
+        "check": "empty_body"
+      },
+      "message": "Function gated with #[cfg(target_arch = \"wasm32\")] has an empty body — WASM target silently no-ops. Provide an implementation or todo!().",
+      "severity": "error",
+      "suggestion": "Implement using web-sys/wasm-bindgen, or add `todo!(\"WASM audio — tracking issue #XXX\")` to surface the gap."
+    },
+    {
+      "rule_id": "SEMANTIC-BC-003",
+      "name": "Rust: std::mem::forget on owned resource handle",
+      "enabled": true,
+      "language": "rust",
+      "ast_pattern": {
+        "type": "CallExpression",
+        "callee": {
+          "path": "std::mem::forget",
+          "argument_type": "OutputStream|Sink|Stream|Handle"
+        }
+      },
+      "message": "std::mem::forget() on a stream/sink handle leaks it for process lifetime. Store in a Resource or static instead.",
+      "severity": "error",
+      "suggestion": "Wrap in lazy_static! or once_cell::sync::Lazy, or store in a Bevy Resource to keep the handle alive cleanly."
+    },
+    {
+      "rule_id": "SEMANTIC-BC-004",
+      "name": "Rust: String find() used as JSON key lookup",
+      "enabled": true,
+      "language": "rust",
+      "ast_pattern": {
+        "type": "MethodCallExpression",
+        "method": "find",
+        "receiver_type": "String|str",
+        "context_contains": "json|serialize|parse|from_json|to_json",
+        "check": "substring_match_instead_of_exact_key"
+      },
+      "message": "String::find() matches substrings, not exact JSON keys — 'hp' will match 'max_hp'. Use serde for JSON parsing.",
+      "severity": "critical",
+      "suggestion": "Replace hand-rolled JSON with serde_json::from_str::<Struct>() and #[derive(Deserialize)]."
+    },
+    {
+      "rule_id": "SEMANTIC-BC-005",
+      "name": "Rust: thread_rng() in system function body",
+      "enabled": true,
+      "language": "rust",
+      "ast_pattern": {
+        "type": "FunctionDefinition",
+        "body_contains": "rand::thread_rng()",
+        "context_not_contains": "cfg(test)"
+      },
+      "message": "rand::thread_rng() in a Bevy system breaks replay determinism. Use ResMut<GameRng> instead.",
+      "severity": "warning",
+      "suggestion": "Accept `mut rng: ResMut<GameRng>` as a system parameter and call rng.gen_range() or rng.random()."
+    },
+    {
+      "rule_id": "SEMANTIC-BC-006",
+      "name": "Rust: Relative path literal in File::open/create without absolute resolution",
+      "enabled": true,
+      "language": "rust",
+      "ast_pattern": {
+        "type": "CallExpression",
+        "callee": ["File::open", "File::create", "fs::write", "fs::read_to_string"],
+        "argument": {
+          "type": "StringLiteral",
+          "check": "relative_path"
+        },
+        "missing": "current_exe|data_dir|config_dir"
+      },
+      "message": "File operation with relative path resolves against CWD, not game install dir. Use absolute paths via dirs crate.",
+      "severity": "error",
+      "suggestion": "Build paths from dirs::data_dir().join(\"biteclub\").join(\"saves/unlocks.json\") for portable, CWD-independent saves."
+    },
+    {
+      "rule_id": "SEMANTIC-BC-007",
+      "name": "Rust: Bevy system with per-frame Vec/HashMap allocation pattern",
+      "enabled": true,
+      "language": "rust",
+      "ast_pattern": {
+        "type": "FunctionDefinition",
+        "decorator_contains": ["system"],
+        "body_contains_any": ["Vec::new()", "HashMap::new()", "HashSet::new()"],
+        "missing": "Local<Resource"
+      },
+      "message": "Per-frame collection allocation in Bevy system. Use Local<T> to reuse the buffer across frames.",
+      "severity": "warning",
+      "suggestion": "Add `mut buf: Local<Vec<Entity>>` system parameter, call buf.clear() at the top, then reuse."
+    }
+  ]
+}

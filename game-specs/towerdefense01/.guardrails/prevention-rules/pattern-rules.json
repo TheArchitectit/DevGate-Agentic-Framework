@@ -1,0 +1,106 @@
+{
+  "$schema": "https://pi-megacompact/guardrails/pattern-rules.schema.json",
+  "description": "Pattern-based prevention rules for TowerDefense01 — Go + Ebiten tower defense game",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "PREVENT-TD-001",
+      "name": "Hardcoded 1.0/60.0 frame time",
+      "enabled": true,
+      "pattern": "1\\.0\\s*/\\s*60\\.0|1\\.0\\s*/\\s*60[^.]|/\\s*60\\.0|1\\s*/\\s*60\\s*[^.]",
+      "forbidden_context": "(ebiten\\.MaxTPS|ebiten\\.CurrentTPS|deltaTime|dt\\s*[:=]|elapsed|time\\.Since|time\\.Delta)",
+      "message": "Hardcoded 1.0/60.0 frame time — physics break on non-60 FPS displays",
+      "severity": "critical",
+      "file_glob": ["*.go"],
+      "suggestion": "Use Ebiten's actual delta: dt := 1.0 / float64(ebiten.CurrentTPS()); or use a fixed timestep accumulator"
+    },
+    {
+      "rule_id": "PREVENT-TD-002",
+      "name": "O(n*m) enemy targeting — linear scan all enemies per tower",
+      "enabled": true,
+      "pattern": "for\\s+.*range\\s+.*(enemies|enemyList|enemySlice|g\\.Enemies)",
+      "forbidden_context": "(grid|quadtree|spatial|partition|index|hash|bucket|neighbor)",
+      "message": "Tower/enemy linear scan — O(n*m) targeting, will lag with many entities. Use spatial partitioning.",
+      "severity": "error",
+      "file_glob": ["*.go"],
+      "suggestion": "Use a spatial grid: divide playfield into cells, check only nearby cells for enemy targeting"
+    },
+    {
+      "rule_id": "PREVENT-TD-003",
+      "name": "Excessive asset directory without atlas",
+      "enabled": true,
+      "pattern": "(asset|sprite|image|texture|resource)",
+      "forbidden_context": "(atlas|packed|spritepack|compressed|webp|optipng|pngquant)",
+      "message": "Large asset directory detected without sprite atlas or compression — bloated repo and slow loading",
+      "severity": "warning",
+      "file_glob": ["assets/**", "*.go"],
+      "suggestion": "Pack sprites into texture atlases, compress audio to OGG/Vorbis, remove unused assets"
+    },
+    {
+      "rule_id": "PREVENT-TD-004",
+      "name": "No spatial partitioning for entity queries",
+      "enabled": true,
+      "pattern": "(len\\(.*[Ee]nemies\\)|len\\(.*[Tt]owers\\)|len\\(.*[Pp]rojectiles\\))",
+      "forbidden_context": "(grid|quadtree|spatial|partition|index|hash|bucket|cell)",
+      "message": "Entity count check in hot path without spatial partitioning — O(n) or O(n²) collision/targeting",
+      "severity": "error",
+      "file_glob": ["*.go"],
+      "suggestion": "Implement a spatial grid: type Grid struct { cells [][][]Entity; cellSize float64 }"
+    },
+    {
+      "rule_id": "PREVENT-TD-005",
+      "name": "Frame-count-based logic instead of delta time",
+      "enabled": true,
+      "pattern": "(frameCount|frame_count|TickCount|tick\\s*%|ticks\\s*%|TickCount\\s*%|frame\\s*%\\s*\\d)",
+      "forbidden_context": "(time\\.Since|time\\.Now|deltaTime|dt\\s*[:=]|elapsed|Duration)",
+      "message": "Frame-count-based timing — logic runs at different speeds on different FPS. Use delta time.",
+      "severity": "error",
+      "file_glob": ["*.go"],
+      "suggestion": "Use time.Now() and time.Since() for timing: elapsed := time.Since(lastUpdate).Seconds()"
+    },
+    {
+      "rule_id": "PREVENT-TD-006",
+      "name": "Go: Ignored error return",
+      "enabled": true,
+      "pattern": "_\\s*,?\\s*=\\s*\\w+\\(",
+      "forbidden_context": "(range|ok|type|assert|select|map)",
+      "message": "Error return value ignored. Always check errors in Go.",
+      "severity": "error",
+      "file_glob": ["*.go"],
+      "suggestion": "Handle the error: if err != nil { return err }"
+    },
+    {
+      "rule_id": "PREVENT-TD-007",
+      "name": "Go: defer in loop",
+      "enabled": true,
+      "pattern": "defer\\s+",
+      "forbidden_context": "(func\\(|func\\s+|anonymous|closure)",
+      "message": "defer in loop — deferred calls accumulate until function returns, may leak resources",
+      "severity": "warning",
+      "file_glob": ["*.go"],
+      "suggestion": "Wrap loop body in a function or call .Close() directly"
+    },
+    {
+      "rule_id": "PREVENT-TD-008",
+      "name": "Ebiten: DrawImage without layout optimization",
+      "enabled": true,
+      "pattern": "screen\\.DrawImage\\(",
+      "forbidden_context": "(DrawImageOptions|GeoM|ColM|Filter|layout|Scale)",
+      "message": "DrawImage without DrawImageOptions — no filtering or transform control",
+      "severity": "info",
+      "file_glob": ["*.go"],
+      "suggestion": "Use op := &ebiten.DrawImageOptions{} for proper transform and filtering control"
+    },
+    {
+      "rule_id": "PREVENT-TD-009",
+      "name": "Go: Global mutable state for game",
+      "enabled": true,
+      "pattern": "var\\s+\\w+\\s+(=|\\[)",
+      "forbidden_context": "(func|type|struct|const|interface|package|import|iota|err)",
+      "message": "Global mutable variable — game state should be encapsulated in a struct passed to Ebiten",
+      "severity": "warning",
+      "file_glob": ["*.go"],
+      "suggestion": "Encapsulate game state in a Game struct: type Game struct { ... }; implement ebiten.Game interface"
+    }
+  ]
+}

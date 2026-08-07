@@ -1,0 +1,96 @@
+{
+  "$schema": "./semantic-rules.schema.json",
+  "description": "Semantic/AST-based prevention rules for TowerDefense01 — Go + Ebiten",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "SEMANTIC-TD-001",
+      "name": "Hardcoded frame time literal in arithmetic",
+      "enabled": true,
+      "language": "go",
+      "ast_pattern": {
+        "type": "BinaryExpression",
+        "operator": "/",
+        "left": { "value": 1.0 },
+        "right": { "value": 60.0 },
+        "check": "not_wrapped_in_tps_call"
+      },
+      "message": "Hardcoded 1.0/60.0 frame time — use ebiten.CurrentTPS() for actual frame rate",
+      "severity": "critical",
+      "suggestion": "Replace with: dt := 1.0 / float64(ebiten.CurrentTPS())"
+    },
+    {
+      "rule_id": "SEMANTIC-TD-002",
+      "name": "Range over enemy slice in tower update",
+      "enabled": true,
+      "language": "go",
+      "ast_pattern": {
+        "type": "RangeStatement",
+        "key": "enemies|enemyList|g.Enemies|game.enemies",
+        "parent": "func.*Update|func.*Target|func.*FindTarget|func.*Attack",
+        "check": "no_spatial_index"
+      },
+      "message": "Tower Update iterates all enemies with range — O(n*m) targeting without spatial partitioning",
+      "severity": "error",
+      "suggestion": "Use spatial grid: query only nearby cells instead of ranging all enemies"
+    },
+    {
+      "rule_id": "SEMANTIC-TD-003",
+      "name": "Go: defer inside for loop",
+      "enabled": true,
+      "language": "go",
+      "ast_pattern": {
+        "type": "DeferStatement",
+        "parent": "ForStatement|RangeStatement",
+        "check": "not_wrapped_in_closure"
+      },
+      "message": "defer inside loop — deferred calls pile up until function returns, leaking resources",
+      "severity": "warning",
+      "suggestion": "Wrap loop body in an anonymous function: func() { defer cleanup(); ... }() or call .Close() directly"
+    },
+    {
+      "rule_id": "SEMANTIC-TD-004",
+      "name": "Ebiten Update without delta time",
+      "enabled": true,
+      "language": "go",
+      "ast_pattern": {
+        "type": "FuncDecl",
+        "receiver": "Game",
+        "name": "Update",
+        "check": "uses_hardcoded_frame_time_or_no_time_calculation"
+      },
+      "message": "Game.Update() does not compute delta time — frame-rate dependent logic",
+      "severity": "error",
+      "suggestion": "Compute dt in Update: dt := 1.0 / float64(ebiten.CurrentTPS()); pass dt to all entity updates"
+    },
+    {
+      "rule_id": "SEMANTIC-TD-005",
+      "name": "Go: Ignored error with blank identifier",
+      "enabled": true,
+      "language": "go",
+      "ast_pattern": {
+        "type": "AssignmentStatement",
+        "left": ["_", "_"],
+        "check": "rhs_returns_error"
+      },
+      "message": "Error return value assigned to blank identifier — silently ignored",
+      "severity": "error",
+      "suggestion": "Check the error: if err != nil { log.Printf(\"error: %v\", err); return err }"
+    },
+    {
+      "rule_id": "SEMANTIC-TD-006",
+      "name": "Global var for game state instead of struct",
+      "enabled": true,
+      "language": "go",
+      "ast_pattern": {
+        "type": "VarDecl",
+        "scope": "package",
+        "name_pattern": "game|state|enemies|towers|projectiles|score|money|lives",
+        "check": "not_const"
+      },
+      "message": "Global mutable variable for game state — should be encapsulated in Game struct",
+      "severity": "warning",
+      "suggestion": "Move state into type Game struct {} and implement ebiten.Game interface"
+    }
+  ]
+}

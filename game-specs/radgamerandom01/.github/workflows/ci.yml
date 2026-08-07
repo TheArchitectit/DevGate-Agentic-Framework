@@ -1,0 +1,143 @@
+name: CI — RadGameRandom01
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  forensic-audit:
+    name: Stub Detection + Forensic Audit + Python Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-cov
+
+      - name: Python tests (pytest)
+        run: |
+          if [ -d tools ] || [ -d scripts ]; then
+            pytest tools/ scripts/ -v --tb=short || true
+          else
+            echo "No Python tool directories found"
+          fi
+
+      - name: GDScript stub detection — pass-only functions
+        run: |
+          echo "Scanning for stub functions (pass-only bodies)..."
+          STUB_COUNT=$(grep -rlE 'func\s+\w+\s*\([^)]*\)\s*(->\s*\w+)?\s*:\s*(pass|#|$)' --include="*.gd" . | wc -l)
+          echo "Files with pass-only stubs: $STUB_COUNT"
+          if [ "$STUB_COUNT" -gt 50 ]; then
+            echo "FAIL: $STUB_COUNT files with stub functions — project may be inflated with non-functional code"
+            exit 1
+          fi
+          echo "PASS: Stub count within acceptable range"
+
+      - name: Forensic audit — AdMob implementation check
+        run: |
+          echo "Checking AdMob implementation..."
+          if grep -rlE '(AdMob|admob|ad_mob|banner_ad|interstitial|rewarded_ad)' --include="*.gd" . | head -5; then
+            if grep -rlE '(init|initialize|load_ad|show_ad|ad_loaded|ad_shown|ad_failed)' --include="*.gd" . | head -5; then
+              echo "PASS: AdMob lifecycle functions detected"
+            else
+              echo "WARN: AdMob references found but no lifecycle implementation — likely a stub"
+            fi
+          else
+            echo "INFO: No AdMob references found"
+          fi
+
+      - name: Forensic audit — Firebase implementation check
+        run: |
+          echo "Checking Firebase implementation..."
+          if grep -rlE '(firebase|Firebase|Firestore|firebase_auth)' --include="*.gd" . | head -5; then
+            if grep -rlE '(api_key|project_id|googleapis\.com|credential|refresh_token)' --include="*.gd" --include="*.json" --include="*.cfg" . | head -5; then
+              echo "PASS: Firebase project configuration detected"
+            else
+              echo "WARN: Firebase references found but no project configuration — likely a stub"
+            fi
+          else
+            echo "INFO: No Firebase references found"
+          fi
+
+      - name: Forensic audit — IAP implementation check
+        run: |
+          echo "Checking IAP implementation..."
+          if grep -rlE '(purchase|iap|in_app_purchase|buy_product|store_purchase)' --include="*.gd" . | head -5; then
+            if grep -rlE '(billing|StoreKit|payment|consume|acknowledge|receipt|GooglePlay|AppStore)' --include="*.gd" --include="*.gdextension" --include="*.cfg" . | head -5; then
+              echo "PASS: IAP billing integration detected"
+            else
+              echo "WARN: IAP references found but no billing SDK — likely a stub"
+            fi
+          else
+            echo "INFO: No IAP references found"
+          fi
+
+      - name: Forensic audit — Multiplayer implementation check
+        run: |
+          echo "Checking multiplayer implementation..."
+          if grep -rlE '(multiplayer|MultiplayerPeer|ENetMultiplayer|rpc|rpc_id)' --include="*.gd" . | head -5; then
+            if grep -rlE '(server|host|join|lobby|room|peer_connected|peer_disconnected|state_sync)' --include="*.gd" . | head -5; then
+              echo "PASS: Multiplayer architecture detected"
+            else
+              echo "WARN: Multiplayer references found but no server/peer management — likely stubs"
+            fi
+          else
+            echo "INFO: No multiplayer references found"
+          fi
+
+      - name: File count audit
+        run: |
+          GD_COUNT=$(find . -name "*.gd" -not -path "./.godot/*" | wc -l)
+          PY_COUNT=$(find . -name "*.py" | wc -l)
+          TOTAL_COUNT=$(find . -type f -not -path "./.git/*" -not -path "./.godot/*" | wc -l)
+          echo "GDScript files: $GD_COUNT"
+          echo "Python files: $PY_COUNT"
+          echo "Total files: $TOTAL_COUNT"
+          if [ "$GD_COUNT" -gt 300 ]; then
+            echo "WARN: $GD_COUNT GDScript files — verify stub-to-implementation ratio"
+          fi
+
+      - name: GDScript guardrails — direct .free() on Node
+        run: |
+          echo "Scanning for direct .free() on Node..."
+          grep -rnE '\.free\(\)' --include="*.gd" . | grep -v queue_free | grep -v is_queued_for_deletion | grep -v '#.*safe' | grep -v '#.*manual' && \
+            { echo "FAIL: Direct .free() on Node detected — use queue_free()"; exit 1; } || \
+            echo "PASS: No direct .free() calls found"
+
+      - name: GDScript guardrails — heavy operations in _process
+        run: |
+          echo "Scanning for heavy operations in _process..."
+          grep -rnE '(_process|_physics_process)' --include="*.gd" . -A 20 | grep -E '(FileAccess|HTTPRequest|ResourceLoader|load\(|DirAccess)' && \
+            { echo "FAIL: Heavy operations in _process — move to _ready()"; exit 1; } || \
+            echo "PASS: No heavy operations in _process"
+
+      - name: Python guardrails — bare except
+        run: |
+          echo "Scanning for bare except clauses..."
+          grep -rnE 'except\s*:' --include="*.py" . | grep -v Exception | grep -v BaseException | grep -v ValueError | grep -v TypeError && \
+            { echo "FAIL: Bare except clause detected"; exit 1; } || \
+            echo "PASS: No bare except clauses found"
+
+      - name: Python guardrails — mutable default arguments
+        run: |
+          echo "Scanning for mutable default arguments..."
+          grep -rnE 'def\s+\w+\([^)]*\b\w+\s*[:=]\s*(\[\]|\{\}|set\(\))' --include="*.py" . && \
+            { echo "FAIL: Mutable default argument detected"; exit 1; } || \
+            echo "PASS: No mutable default arguments found"

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://pi-megacompact/guardrails/pattern-rules.schema.json",
+  "description": "Pattern-based prevention rules for ctrl-alt-defeat — Godot 4 card game prototype (15 files, Sprint 5/6)",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "rule_id": "PREVENT-CAD-001",
+      "name": "Insufficient card count for gameplay testing",
+      "enabled": true,
+      "pattern": "CARD_COUNT|cards\\.size\\(\\)|card_database",
+      "forbidden_context": "(test|spec)",
+      "message": "Card game has fewer than 20 unique cards — insufficient for deck building and gameplay testing",
+      "severity": "warning",
+      "file_glob": ["*card*.gd", "*database*.gd"],
+      "suggestion": "Add more card definitions as Resource files; minimum 20 cards before gameplay testing milestone"
+    },
+    {
+      "rule_id": "PREVENT-CAD-002",
+      "name": "Hardcoded enemy stats instead of Resource files",
+      "enabled": true,
+      "pattern": "(hp|health|damage|attack)\\s*=\\s*\\d+",
+      "forbidden_context": "(const|@export|Resource|test|spec|\\.tres)",
+      "message": "Hardcoded enemy stat — prototype should use data-driven Resource files for easy expansion",
+      "severity": "info",
+      "file_glob": ["*enemy*.gd"],
+      "suggestion": "Create EnemyStats resource files: var stats: EnemyStats = preload('res://resources/enemies/goblin.tres')"
+    },
+    {
+      "rule_id": "PREVENT-CAD-003",
+      "name": "Single hardcoded combat encounter",
+      "enabled": true,
+      "pattern": "encounter.*=.*\\[\\s*\\{|combat.*=.*\\[\\s*\\{|ENEMY.*=.*\"goblin\"",
+      "forbidden_context": "(test|spec|manager|array|\\[.*\\d+,)",
+      "message": "Single hardcoded combat encounter — needs encounter manager for multiple scenarios",
+      "severity": "warning",
+      "file_glob": ["*combat*.gd", "*battle*.gd"],
+      "suggestion": "Create an EncounterManager that loads encounters from Resource files"
+    },
+    {
+      "rule_id": "PREVENT-CAD-004",
+      "name": "Missing SceneManager autoload",
+      "enabled": true,
+      "pattern": "change_scene|get_tree\\(\\)\\.change_scene|SceneTree\\.change_scene",
+      "forbidden_context": "(SceneManager|scene_manager|autoload)",
+      "message": "Direct scene change without SceneManager — no progression tracking or transition management",
+      "severity": "warning",
+      "file_glob": ["*.gd"],
+      "suggestion": "Create SceneManager autoload with change_scene_with_transition() and progression tracking"
+    },
+    {
+      "rule_id": "PREVENT-CAD-005",
+      "name": "combat_end signal without reward handler",
+      "enabled": true,
+      "pattern": "combat_end|battle_end|victory",
+      "forbidden_context": "(reward|loot|xp|experience|gold|connect)",
+      "message": "Combat end signal has no reward handler — victories give no loot, XP, or currency",
+      "severity": "error",
+      "file_glob": ["*combat*.gd", "*battle*.gd"],
+      "suggestion": "Connect combat_end signal to a reward handler: combat_end.connect(_on_combat_end_rewards)"
+    },
+    {
+      "rule_id": "PREVENT-CAD-006",
+      "name": "Prototype code without TODO/sprint tracking",
+      "enabled": true,
+      "pattern": "(stub|placeholder|temporary|hack|prototype)",
+      "forbidden_context": "(TODO|FIXME|Sprint|#[0-9]|ticket|issue)",
+      "message": "Prototype/stub code without sprint tracking — will be forgotten and ship as-is",
+      "severity": "info",
+      "file_glob": ["*.gd"],
+      "suggestion": "Add TODO(Sprint-7): or FIXME(#123) to track when prototype code should be replaced"
+    }
+  ]
+}
