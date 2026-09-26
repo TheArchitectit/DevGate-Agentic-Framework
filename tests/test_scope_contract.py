@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.platform_caps import require_bash
+
 REPO = Path(__file__).resolve().parent.parent
 
 
@@ -34,6 +36,7 @@ class TestSingleScopeContract(unittest.TestCase):
     def test_gates_skip_planted_cache_trees(self):
         """A fake module cache with planted markers must not appear in any
         gate's scan (the 6,703-vs-102 divergence class)."""
+        require_bash("the silent-success gate is a bash script")
         with tempfile.TemporaryDirectory() as td:
             proj = Path(td) / "proj"
             (proj / "src").mkdir(parents=True)
@@ -79,6 +82,7 @@ class TestGoTestExclusionScopeNotMute(unittest.TestCase):
         return proj
 
     def test_go_test_file_excluded_for_seeded_family(self):
+        require_bash("the silent-success gate is a bash script")
         with tempfile.TemporaryDirectory() as td:
             proj = self._proj(Path(td))
             (proj / "store_test.go").write_text(
@@ -97,6 +101,7 @@ class TestGoTestExclusionScopeNotMute(unittest.TestCase):
 
     def test_non_test_go_file_still_fires(self):
         """The exclusion must not mute the family for production code."""
+        require_bash("the silent-success gate is a bash script")
         with tempfile.TemporaryDirectory() as td:
             proj = self._proj(Path(td))
             (proj / "store.go").write_text(

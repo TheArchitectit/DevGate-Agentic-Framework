@@ -35,6 +35,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from tests.platform_caps import require_fcntl  # noqa: E402
+
 import workflow_read as wr  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
@@ -204,6 +208,10 @@ def test_the_harness_and_the_guard_read_the_same_file_the_same_way(tmp_path):
     "readable" means, a mutation could be judged INVALID by the harness while
     the guard happily read it — or the reverse, which reads as a killed
     mutation."""
+    # mutation_harness takes a POSIX advisory lock at import time (fcntl), so
+    # this consumer-agreement check cannot even be loaded on a host without
+    # it. The reader's own contract is covered by the rest of this file.
+    require_fcntl("the mutation harness locks the workflow with fcntl")
     import mutation_harness as h
 
     good = tmp_path / "good.yml"

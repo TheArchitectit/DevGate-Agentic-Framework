@@ -11,6 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from tests.platform_caps import require_resource_module  # noqa: E402
+
 from hub.coherence import resource_limits as rl
 
 
@@ -56,7 +58,15 @@ class TestRunCapped(unittest.TestCase):
     def test_runaway_output_is_truncated_not_absorbed(self):
         """A process spewing output forever must be capped — the harness
         survives with truncated output and a flag, not OOM."""
-        bomb = "print('x' * 1000)\n" * 5000  # ~5MB
+        # ~1MB of output from a ONE-LINE program. The cap under test is
+        # 100_000 bytes, so the bomb only has to exceed it — it does not have
+        # to be 5,000 lines of source. It used to be ("print('x'*1000)\n" *
+        # 5000), which is a 110KB command line: above the 32767-character
+        # ceiling Windows puts on CreateProcess, where the spawn fails
+        # (WinError 206) and the failure is reported as a missing file. The
+        # test then measured nothing about output capping and the harness's
+        # real subject stayed untested on that platform.
+        bomb = "import sys; sys.stdout.write('x' * 1_000_000)"
         r = rl.run_capped([sys.executable, "-c", bomb],
                           timeout=30, max_output=100_000)
         self.assertEqual(r["exit"], 0)
@@ -151,7 +161,18 @@ class TestGovernedRetryLoop(unittest.TestCase):
 
 
 class TestResourceAuditScript(unittest.TestCase):
-    """The measurement CLI reports honest numbers for a known workload."""
+    """The measurement CLI reports honest numbers for a known workload.
+
+    The CLI reports CPU from `resource.getrusage(RUSAGE_CHILDREN)`, which is
+    POSIX-only, so the whole class is gated on that module — every test here
+    runs the script, and without the module the script cannot start (the
+    import is at its top level by design: the CLI's numbers would be fiction
+    without it).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        require_resource_module("scripts/resource_audit.py imports `resource`")
 
     def test_audit_measures_a_sleep(self):
         script = Path(__file__).resolve().parent.parent / \

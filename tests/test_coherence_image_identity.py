@@ -22,6 +22,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from tests.platform_caps import require_bash  # noqa: E402
+
 from hub.coherence import schemacheck  # noqa: E402
 from hub.coherence.profiles import (ProfileRegistryError,  # noqa: E402
                                     check_launch_digest, load_registry,
@@ -220,6 +222,11 @@ class TestIdentityChainInCI(unittest.TestCase):
         the step reads the identity registry with it — and the stubs shadow
         podman and curl at the front of PATH.
         """
+        # The step is bash (it is a GitHub Actions `run:` block) and the stubs
+        # are extensionless shebang scripts the step invokes by name on a
+        # ":"-separated PATH. Neither is runnable on a host without a POSIX
+        # shell, so the step cannot be executed here at all.
+        require_bash("the ci.yml step under test is a bash block with stubbed tools on PATH")
         with tempfile.TemporaryDirectory() as d:
             sb = Path(d) / "bin"
             sb.mkdir()

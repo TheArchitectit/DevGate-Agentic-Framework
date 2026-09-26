@@ -215,6 +215,13 @@ def test_generated_shell_stubs_are_syntactically_valid_bash():
     import subprocess
     import tempfile
 
+    from tests.platform_caps import require_bash
+
+    # `bash -n` is the whole assertion: the syntax check needs a bash. The
+    # EXTRACTION above (which stubs exist at all) is pure Python and still
+    # runs on any host, so this skips late rather than at module level.
+    require_bash("the stub syntax lint runs `bash -n` over each stub body")
+
     bodies = []
     for f in sorted((REPO / "tests").rglob("*.py")):
         bodies.extend((f, b) for b in _bash_bodies_from(f))

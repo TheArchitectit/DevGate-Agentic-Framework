@@ -46,6 +46,8 @@ import subprocess
 import unittest
 from pathlib import Path
 
+from tests.platform_caps import require_bash
+
 REPO = Path(__file__).resolve().parent.parent
 TEMPLATE = REPO / "templates" / "github-workflows" / "secret-validation.yml"
 CI = REPO / ".github" / "workflows" / "ci.yml"
@@ -386,6 +388,10 @@ class TestSecretValidationTemplate(unittest.TestCase):
         return sb
 
     def _bash(self, run: str, tmp, sandbox=None):
+        # The template under test is GitHub Actions YAML whose steps are bash.
+        # Without a bash to run them, every assertion below would be about the
+        # absence of an interpreter, not about the template.
+        require_bash("the validation template's steps are bash")
         env = {
             **os.environ,
             "GITHUB_WORKSPACE": str(tmp),
