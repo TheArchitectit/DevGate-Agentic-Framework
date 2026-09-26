@@ -44,6 +44,15 @@ REPO = Path(__file__).resolve().parent.parent
 WRAPPER = REPO / "scripts" / "coherence-local"
 TEMPLATE = REPO / "templates" / "github-workflows" / "spec-coherence.yml"
 
+# How to SPAWN the wrapper, not what it is. POSIX honors the shebang, so the
+# wrapper is executed by path exactly as an operator would type it. Windows
+# cannot spawn an extensionless file at all (WinError 193, "%1 is not a valid
+# Win32 application"), so there the same bytes run through the interpreter
+# that is running this test. Invoking via sys.executable on POSIX would be
+# equally correct but would stop exercising the shebang line, so the branch
+# stays.
+WRAPPER_CMD = [str(WRAPPER)] if os.name != "nt" else [sys.executable, str(WRAPPER)]
+
 from tests.fixtures.coherence import fixtures as fx  # noqa: E402
 
 
@@ -167,6 +176,16 @@ class BuilderByteEquivalenceTest(unittest.TestCase):
         for a in argv:
             for k, v in subs.items():
                 a = a.replace(k, v)
+            # The template is POSIX CI text: it spells a derived path
+            # "$CAND_ROOT/subject", which on POSIX is already the native
+            # spelling. On Windows the replayed argument would keep the
+            # forward slash while the wrapper (spawned natively) emits
+            # backslashes, and the byte compare below would blame the
+            # wrapper for a separator the template's own shell would never
+            # produce inside the container. Normalize the replayed SPELLING
+            # of any argument rooted in the temp dir; nothing else is touched.
+            if str(self.tmp) in a:
+                a = os.path.normpath(a)
             cmd.append(a)
         env = dict(os.environ, PYTHONPATH=".")
         r = subprocess.run(cmd, cwd=str(REPO), env=env,
@@ -175,7 +194,7 @@ class BuilderByteEquivalenceTest(unittest.TestCase):
 
     def _run_wrapper(self, out_dir: Path, extra=()) -> subprocess.CompletedProcess:
         return subprocess.run(
-            [str(WRAPPER), "--subject", str(self.roots["subject"]),
+            [*WRAPPER_CMD, "--subject", str(self.roots["subject"]),
              "--openspec", str(self.roots["openspec"]),
              "--policy", str(self.roots["policy"]),
              "--context", str(self.roots["context"]),
@@ -198,7 +217,13 @@ class BuilderByteEquivalenceTest(unittest.TestCase):
             b = path.read_bytes()
             self.assertTrue(b, f"empty {path.name} — a byte compare of "
                                "nothing proves nothing")
-            return b.replace(str(own_out).encode(), b"<OUT>")
+            # Two spellings: the path as it appears in the bytes, and its
+            # JSON-escaped form. A Windows path is full of backslashes, which
+            # JSON doubles, so the raw replace alone would miss it and the
+            # comparison would report the `outputs` directory as a real
+            # difference. Both normalizations stand in for the SAME field.
+            escaped = json.dumps(str(own_out))[1:-1].encode()
+            return b.replace(str(own_out).encode(), b"<OUT>").replace(escaped, b"<OUT>")
 
         for name in ("request.json", "launch.json"):
             tb = normalize(out_a / name, out_a)
@@ -245,7 +270,7 @@ class BuilderByteEquivalenceTest(unittest.TestCase):
         out = self.tmp / "outcp"
         out.mkdir()
         r = subprocess.run(
-            [str(WRAPPER), "--subject", str(bad / "subject"),
+            [*WRAPPER_CMD, "--subject", str(bad / "subject"),
              "--openspec", str(bad / "openspec"),
              "--policy", str(bad / "policy"),
              "--context", str(bad / "ctx"),
@@ -298,7 +323,7 @@ class DryRunTranscriptTest(unittest.TestCase):
             fx.build_root(tmp, binding=True)
             out = tmp / "out"
             r = subprocess.run(
-                [str(WRAPPER), "--subject", str(tmp / "subject"),
+                [*WRAPPER_CMD, "--subject", str(tmp / "subject"),
                  "--openspec", str(tmp / "openspec"),
                  "--policy", str(tmp / "policy"),
                  "--context", str(tmp / "ctx"),
@@ -339,7 +364,7 @@ class ProfileIdentityTest(unittest.TestCase):
     def _wrapper(self, out: Path, tmp: Path, env_extra: dict,
                  extra=()) -> subprocess.CompletedProcess:
         return subprocess.run(
-            [str(WRAPPER), "--subject", str(tmp / "subject"),
+            [*WRAPPER_CMD, "--subject", str(tmp / "subject"),
              "--openspec", str(tmp / "openspec"),
              "--policy", str(tmp / "policy"),
              "--context", str(tmp / "ctx"),
@@ -479,13 +504,20 @@ class DriverExitRelayTest(unittest.TestCase):
     driver's environment is dumped so propagation is asserted on the driver
     too, not just the builder."""
 
+    @unittest.skipIf(os.name == "nt",
+                     "intercepts `python3` on PATH with an executable bash stub; "
+                     "Windows resolves the interpreter by PATHEXT and cannot run "
+                     "an extensionless shebang script, so the interception this "
+                     "test observes never happens (the stub is never spawned, the "
+                     "real interpreter runs, and the assertion below would be "
+                     "asserting against the real service)")
     def test_service_exit_20_is_relayed_not_resolved_green(self):
         tmp = Path(tempfile.mkdtemp(prefix="dg-relay-"))
         try:
             fx.build_root(tmp, binding=True)
             out = tmp / "out"
             dry = subprocess.run(
-                [str(WRAPPER), "--subject", str(tmp / "subject"),
+                [*WRAPPER_CMD, "--subject", str(tmp / "subject"),
                  "--openspec", str(tmp / "openspec"),
                  "--policy", str(tmp / "policy"),
                  "--context", str(tmp / "ctx"),
@@ -513,7 +545,7 @@ class DriverExitRelayTest(unittest.TestCase):
                 f'exec {sys.executable} "$@"\n')
             os.chmod(fake / "python3", 0o755)
             r = subprocess.run(
-                [str(WRAPPER)] + [a for a in
+                list(WRAPPER_CMD) + [a for a in
                                   # rebuild real args; same roots as dry-run
                                   ["--subject", str(tmp / "subject"),
                                    "--openspec", str(tmp / "openspec"),
@@ -560,7 +592,7 @@ class ControlPlaneRootsTest(unittest.TestCase):
         local command must refuse too — a wrapper that defaulted
         --policy/--context to repo content would be repository content deciding
         what runs, the exact thing the template's empty defaults prevent."""
-        r = subprocess.run([str(WRAPPER)], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        r = subprocess.run(list(WRAPPER_CMD), capture_output=True, text=True, encoding="utf-8", errors="replace")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("--subject", r.stderr + r.stdout)
 
