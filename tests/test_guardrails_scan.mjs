@@ -400,6 +400,35 @@ check("zig: finding names the rule and the file",
 check("zig: a clean zig file is not reported", !r.err.includes("clean.zig"));
 cleanup(dir13);
 
+// --- 16. Zig comment lines are comments (the extension got its grammar) -----
+// Found 2026-09-26 reviewing the Zig onboarding: .zig entered SOURCE_EXTENSIONS
+// without entering isCommentLine's hard-coded extension lists, so the
+// skip-comment-only-lines contract never applied to Zig. A `///` doc comment
+// MENTIONING @panic or std.debug.print fired PREVENT-Z-004/005 as if it were
+// code — noise that trains people to ignore the rule. Same root shape as the
+// vacuous-gate bug: extension added, language semantics not. Assert both
+// directions: a doc comment mentioning the pattern is silent, a real call
+// still fires.
+const dir16 = mkdtempSync(join(tmpdir(), "devgate-scan-"));
+makeProject(dir16, {
+	"src/documented.zig":
+		"const std = @import(\"std\");\n\n" +
+		"/// This helper used to call @panic() on a null, which is why it\n" +
+		"/// returns an error now. It also used std.debug.print before.\n" +
+		"pub fn tidy() !void {\n    return;\n}\n",
+	"src/liveliteral.zig":
+		"const std = @import(\"std\");\n" +
+		"pub fn real() void {\n" +
+		"    const f = std.fs.cwd() catch unreachable; // trailing note\n" +
+		"}\n",
+});
+r = runScan(dir16);
+check("zig comment: doc-comment mention of @panic/print is NOT reported",
+	!r.err.includes("documented.zig"));
+check("zig comment: live catch unreachable in the same run still fires",
+	r.code === 1 && r.err.includes("PREVENT-Z-001") && r.err.includes("liveliteral.zig"));
+cleanup(dir16);
+
 // --- 15. ESM (.mjs/.cjs) source is scanned, AND rules fire ------------------
 // Same class as section 14's Zig gap, discovered 2026-09-26: every first-party
 // JS in DevGate itself is .mjs (8 tracked files), but SOURCE_EXTENSIONS listed

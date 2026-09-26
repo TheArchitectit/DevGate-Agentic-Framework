@@ -286,23 +286,17 @@ function isCommentLine(line, ext) {
 		if (trimmed.startsWith("#")) return true;
 	} else if (ext === ".html" || ext === ".xml" || ext === ".svg") {
 		if (trimmed.startsWith("<!--")) return true;
-	} else if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".svelte", ".rs", ".go", ".java", ".kt", ".gd", ".php"].includes(ext)) {
+	// .zig: Zig uses // line comments only, so it belongs in the same list as
+	// the other // languages. It was missed when .zig joined SOURCE_EXTENSIONS,
+	// which made doc comments mentioning @panic/std.debug.print fire as code.
+	} else if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".svelte", ".rs", ".go", ".java", ".kt", ".gd", ".php", ".zig"].includes(ext)) {
 		if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) return true;
 	}
-	// Inline trailing comments (// or # after code) — detect if the pattern
-	// appears only inside a comment suffix. We check if everything after the
-	// first // or # (for Python) is the only place the pattern could match.
-	// Conservative: only strip the comment portion for single-line comment markers.
-	if ([".ts", ".tsx", ".js", ".jsx", ".svelte", ".rs", ".go", ".java", ".kt", ".gd", ".php"].includes(ext)) {
-		const commentIdx = line.indexOf("//");
-		if (commentIdx >= 0) {
-			// Check if the line before // is only whitespace or code that doesn't match typical patterns
-			const beforeComment = line.substring(0, commentIdx).trim();
-			// If the line is ONLY a comment (already caught above), skip.
-			// For trailing comments on code lines, we DON'T strip — the code
-			// portion is still scanned. Only full-line comments are skipped.
-		}
-	}
+	// Inline trailing comments (// or # after code) are NOT stripped here —
+	// a trailing comment on a code line is still a code line, and the code
+	// portion is scanned. Only full-line comments are skipped. (An earlier
+	// draft computed commentIdx/beforeComment here and discarded both, which
+	// was a dead branch; removed rather than carried.)
 	return false;
 }
 
