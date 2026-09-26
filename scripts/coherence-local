@@ -154,6 +154,11 @@ def main(argv=None) -> int:
     prof = _profile(label, want_digest)
     out = Path(args.outputs)
     out.mkdir(parents=True, exist_ok=True)
+    # Rootless podman maps the launch user (1000:1000) to a host subuid, not
+    # to this process's uid — the container cannot write a dir we just made
+    # 755 (measured on two hosts 2026-09-26). World-writable on the outputs
+    # dir only; every input mount stays read-only.
+    out.chmod(0o777)
     request_json = str(out / "request.json")
     launch_json = str(out / "launch.json")
     request_id = args.request_id or Path(args.subject).name

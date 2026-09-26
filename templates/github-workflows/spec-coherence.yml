@@ -283,6 +283,12 @@ jobs:
                   CAND_ROOT="$PWD"
                   OUT="$RUNNER_TEMP/coherence-$(echo "$SUBJECT" | tr '/.' '--')"
                   mkdir -p "$OUT"
+                  # The container writes the bundle as its configured user
+                  # (1000:1000), which under rootless podman's subuid map is
+                  # NOT the runner user that owns this dir — measured on two
+                  # hosts 2026-09-26. World-writable on the outputs dir only;
+                  # every input mount stays read-only.
+                  chmod 777 "$OUT"
                   # Build the request + launch config. Running from .devgate so
                   # the module import resolves to the PINNED clone, never to a
                   # candidate-local `hub/` that could shadow it; every path
