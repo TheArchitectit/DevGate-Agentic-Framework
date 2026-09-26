@@ -1107,6 +1107,14 @@ sprints. Findings and dispositions:
       here — recorded under the open-questions path rather than designed
       unilaterally.
 - [ ] Stage 3 readiness review before any enforced fleet rollout.
+      **Inputs assembled 2026-09-26** — `stage3-readiness.md`: the 12 release acceptance
+      criteria dispositioned one by one with cited evidence (8 MET with named tests/measured
+      runs, criterion 8's ratchet-demo half + 9's fleet-half + 10's real-repo half OPEN on R9
+      pilots, criterion 12's evaluator-revocation leg OPEN on an owner decision), the ten
+      owner-decision open questions tabulated with status, and the verdict: **not ready for
+      enforced rollout — the gate is built and measured; the enforcement posture is waiting
+      on humans, not code.** The review itself (the owner's sign-off act) remains open; this
+      line now points at its complete input package instead of an empty promise.
 
 **Gate:** all 12 release acceptance criteria in `acceptance.md` demonstrably met.
 
