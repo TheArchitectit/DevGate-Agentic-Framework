@@ -38,7 +38,16 @@ class HubFixture:
         while True:
             try:
                 self.server.handle_request()
-            except OSError:
+            except (OSError, ValueError):
+                # close() unblocks this thread by closing the listening socket,
+                # and the exception that surfaces from a closed descriptor is
+                # platform-shaped: POSIX raises OSError, Windows raises
+                # ValueError("Invalid file descriptor: -1") from the selector's
+                # fileno(). Both mean "shut down", not "the server broke" —
+                # catching only OSError left the shutdown racing the
+                # interpreter's teardown as an unhandled thread exception,
+                # which pytest reports as a warning attached to an unrelated
+                # test.
                 return
 
     def close(self):

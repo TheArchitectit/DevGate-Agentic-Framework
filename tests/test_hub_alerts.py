@@ -92,6 +92,19 @@ def _start_fake_gh(routes: dict) -> tuple[ThreadingHTTPServer, int]:
     return server, server.server_address[1]
 
 
+def _stop_fake_gh(server: ThreadingHTTPServer) -> None:
+    """Stop the serve loop AND close the listening socket.
+
+    shutdown() alone returns from serve_forever but leaves the socket open,
+    which the interpreter reports as a ResourceWarning on an unrelated test
+    later in the run — a leak that reads like a defect in whatever test the
+    warning lands on. Paired with _start_fake_gh so the two halves are used
+    together.
+    """
+    server.shutdown()
+    server.server_close()
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -147,7 +160,7 @@ def test_first_alert_files_new_issue(tmp_path):
         assert "devgate-monitor" in issue["labels"]
         assert "owner/repo" in issue["body"]
     finally:
-        server.shutdown()
+        _stop_fake_gh(server)
 
 
 def test_recurrence_comments_not_new_issue(tmp_path):
@@ -186,7 +199,7 @@ def test_recurrence_comments_not_new_issue(tmp_path):
         assert len(comments) == 1, f"expected 1 comment, got {len(comments)}"
         assert "queued 50m" in comments[0]["body"]
     finally:
-        server.shutdown()
+        _stop_fake_gh(server)
 
 
 def test_dedupe_by_different_runner(tmp_path):
@@ -210,7 +223,7 @@ def test_dedupe_by_different_runner(tmp_path):
 
         assert len(created_issues) == 2, f"expected 2 issues (different runners), got {len(created_issues)}"
     finally:
-        server.shutdown()
+        _stop_fake_gh(server)
 
 
 def test_null_notifier_logs_only(tmp_path):
@@ -259,7 +272,7 @@ def test_recurrence_comment_cooldown(tmp_path):
         lines = (Path(alerts_dir) / f"alerts-{day}.jsonl").read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 3, f"expected 3 audit lines, got {len(lines)}"
     finally:
-        server.shutdown()
+        _stop_fake_gh(server)
 
 
 def test_build_notifier_factory_github_issue(tmp_path):
