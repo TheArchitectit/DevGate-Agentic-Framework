@@ -26,27 +26,32 @@ shipped test, drill, or measured run — not prose intent.
 
 ## The ten owner-decision open questions (acceptance.md) — status
 
+**UPDATE 2026-09-26: the owner accepted all six §7 defaults (Q1–Q5, Q9)** —
+recorded in `acceptance.md` ("Decided") and tasks.md:35. The rows below are
+retained as the pre-decision record, marked with the answers.
+
 | # | Question | Status |
-|---|---| readiness |
-| 1 | Authoritative OpenSpec approval mechanism | OPEN |
-| 2 | Which assertion classes form the enforced core for the first pilot | OPEN |
-| OQ3 | Max advisory age | OPEN (owner's number) — enforcement machinery shipped, blocked only on the number |
-| 4 | Exception/rollback approvers | OPEN |
-| 5 | Which architectures must be byte-equivalent at launch | PARTIALLY ANSWERED by the single-profile registry (amd64 only) |
+|---|---|---|
+| 1 | Authoritative OpenSpec approval mechanism | **DECIDED** — detached control-plane approval record (package digest + authority + repo scope + validity window) |
+| 2 | Which assertion classes form the enforced core for the first pilot | **DECIDED** — product-identity consistency + traceability completeness + release-claim consistency |
+| OQ3 | Max advisory age | **DECIDED** — 30 days, renewable once with owner + written reason + new expiry + control-plane approval (the machinery's fixture default already enforced exactly this value) |
+| 4 | Exception/rollback approvers | **DECIDED** — control-plane authority; repository exceptions additionally countersigned by the repo maintainer |
+| 5 | Which architectures must be byte-equivalent at launch | **DECIDED** — amd64 only; arm64 semantic-equivalence until provisioned |
 | 6 | Offline evaluation: launch requirement or hardening milestone | OPEN |
 | 7 | Evidence retention periods | OPEN (retention_class fallback shipped) |
 | 8 | Backward-compatible result fields | OPEN |
-| 9 | gamerepo01 normative vs historical facts | OPEN (R9 owner approval) |
+| 9 | gamerepo01 normative vs historical facts | **DECIDED** — fixture starts synthetic; declared identity is normative, historical lineage informative |
 | 10 | Vision determinism in the first 3D slice | OPEN (S7) |
 
 ## Verdict
 
-**Not ready for enforced fleet rollout.** The code-surface criteria (1–7,
-11) are MET with named tests and measured runs. What blocks Stage 3:
+**Not ready for enforced fleet rollout — but the decision half of the gap
+closed 2026-09-26.** The code-surface criteria (1–7, 11) are MET with named
+tests and measured runs. What still blocks Stage 3:
 
-1. **Owner decisions** — 10 open questions, of which OQ3 (advisory age),
-   OQ2 (enforced core), and the evaluator-revocation scope decision
-   directly gate enforcement posture.
+1. ~~**Owner decisions**~~ — Q1–Q5, Q9 **answered 2026-09-26**; the
+   remaining open questions (Q6–Q8, Q10) do not gate enforcement posture
+   per the criteria matrix above.
 2. **Real pilots** — the R9 provenance capture + owner approval for real
    repo facts (gamerepo01 lineage, LobsterWars 13 findings) gates criteria
    8 (ratchet demo), 9 (fleet-half measurement), and 10 (real-fixture
@@ -56,5 +61,6 @@ shipped test, drill, or measured run — not prose intent.
    revocation record (coh-pol-02 machinery) or the owner's scoping to
    pinned-image lifecycle; either way a decision, then build-or-runbook.
 
-The review's honest headline: **the gate is built and measured; the
-enforcement posture is waiting on humans, not code.**
+The review's honest headline, updated: **the gate is built, measured, and
+its policy decisions are made; what remains is real-repo pilot evidence
+and the evaluator-revocation scope call.**

@@ -32,7 +32,20 @@ Dependency-ordered sprint plan for the full program. Sprint S0–S1 gate everyth
 - [ ] Lead review of `review.md` findings R1–R9 and design v2 amendment log — not performed.
 - [ ] Accept or amend ADR-001 through ADR-010 — not reviewed clause-by-clause; ADR-011…019 likewise unaccepted.
 - [x] Record repo defaults: `coh-*` requirement namespace; no `openspec/gate-config.json` yet (advisory); stdlib slice-1 runtime with pinned container deferred — recorded in `next-phase-plan.md`.
-- [ ] Owner decisions on acceptance.md questions Q1–Q5, Q9 — proposed defaults in `s1-freeze-record.md` §7; unconfirmed.
+- [x] Owner decisions on acceptance.md questions Q1–Q5, Q9 — proposed defaults in `s1-freeze-record.md` §7; unconfirmed.
+      **CONFIRMED 2026-09-26 by the owner** (in-session, explicit): all six proposed defaults accepted
+      as written — Q1 detached control-plane approval record (package digest + authority + repo scope +
+      validity window; ADR-011/014), Q2 enforced core = product-identity consistency + traceability
+      completeness + release-claim consistency, Q3 max advisory age **30 days** renewable once with
+      owner + written reason + new expiry + control-plane approval, Q4 control-plane authority with
+      repo exceptions additionally countersigned by the repo maintainer, Q5 amd64-only byte-equivalence
+      at launch (arm64 semantic-equivalence until provisioned), Q9 gamerepo01 fixture starts synthetic
+      (normative identity = the package's declared identity; historical lineage informative). Q3's
+      number unblocks the advisory-age enforcement half (`stages.max_advisory_age_days` machinery was
+      already built; the value it waits for is 30); Q5 unblocks the arm64 line's disposition (semantic
+      equivalence until provisioned — the "NOT materializable on this host" state is now an accepted
+      posture, not a blocker); Q9 keeps the R9 synthetic-labeling rule as the accepted norm. The
+      remaining open decisions (Q6–Q8, Q10) do not gate Stage 3 per the readiness matrix.
 - [x] Package committed — `eac440a`. (Committed without the review gate; recorded as process debt.)
 
 **Gate:** NOT CLOSED — pending independent audit and lead review. **Blocks:** retroactive; S2+ proceed at risk recorded in `s2-remediation.md`.

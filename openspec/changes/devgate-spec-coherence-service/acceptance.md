@@ -66,6 +66,22 @@ The first production release is acceptable only when:
 9. Which facts in the `gamerepo01` fixture are normative product identity versus historical audit context?
 10. Which parts of vision evaluation can meet enforced determinism in the first 3D slice?
 
+### Decided (2026-09-26)
+
+**Q1, Q2, Q3, Q4, Q5, Q9 were answered by the owner** — all six proposed
+defaults from `s1-freeze-record.md` §7 accepted as written: (1) detached
+control-plane approval record binding package digest + authority + repo
+scope + validity window; (2) enforced core = product-identity consistency,
+traceability completeness, release-claim consistency; (3) max advisory
+age **30 days**, renewable once with owner + written reason + new expiry +
+control-plane approval; (4) control-plane authority approves fleet
+exceptions and emergency rollback; repository exceptions additionally
+require the repo maintainer's countersign; (5) amd64-only byte-equivalence
+at launch, arm64 semantic-equivalence until provisioned; (9) gamerepo01
+fixture starts synthetic — normative identity is the package's declared
+identity, historical lineage is informative. Q6–Q8 and Q10 remain open
+and do not gate Stage 3 (see `stage3-readiness.md`).
+
 ## Recommended first thin slice
 
 Use one synthetic repository plus a `gamerepo01`-derived identity fixture. Resolve one approved package, evaluate three deterministic assertions, emit canonical evidence, and run in advisory mode from the pinned container. Then enable Stage 2 ratchet for LobsterWars using its 13 named findings as the fixed baseline. Do not begin with broad AI interpretation, automatic repair, or full-fleet enforcement.
