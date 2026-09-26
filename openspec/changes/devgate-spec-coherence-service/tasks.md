@@ -990,6 +990,31 @@ sprints. Findings and dispositions:
       doc's window, not a gate redesign.
 - [ ] SLOs: evaluation availability, maximum advisory age.
 - [ ] Runbooks: outage, rollback, policy recovery, key rotation, evaluator revocation.
+      **Measured 2026-09-26.** Four of five scenarios are already covered by
+      shipped, drill- or test-verified runbooks: outage (`hub-outage.md` +
+      `fleet_drill.py`, closed at :818), rollback
+      (`policy-rollback-and-key-rotation.md` §policy-rollback, `nc-09`),
+      policy recovery (the same runbook's three-branch recovery — restore
+      from the control plane / re-issue the binding / grandfather window,
+      with the "do NOT edit the binding" rule stated), and key rotation
+      (planned + emergency paths, both with the cache-non-exposure
+      argument, `nc-10` + attestation tests). The fifth, **evaluator
+      revocation, is a BUILD gap, not a doc gap** — recorded rather than
+      improvised into a runbook: the spec's revocation language (coh-ev-05)
+      covers signers only, and the approved evaluator set (coh-pol-02)
+      exists today as `evaluators.BUILTINS` (code, changes only with a new
+      pinned image) plus the image digest bound at attestation
+      (`attest.py` `evaluator_image_digest`). Nothing lets a promotion-time
+      consumer distinguish an evaluator image that was approved at
+      evaluation time from one retroactively found bad — `verify()` checks
+      the signer, not the evaluator's standing. Closing this needs either
+      an approved-evaluator-set revocation record the consumer can check
+      (a new control-plane trust root, coh-pol-02 machinery) or an owner
+      decision to scope "evaluator revocation" to the pinned-image lifecycle
+      (a bad image is retired by re-pinning; old attestations stay valid for
+      what they proved at the time). Owner input is genuinely required
+      here — recorded under the open-questions path rather than designed
+      unilaterally.
 - [ ] Stage 3 readiness review before any enforced fleet rollout.
 
 **Gate:** all 12 release acceptance criteria in `acceptance.md` demonstrably met.
