@@ -96,6 +96,7 @@ It does not replace:
 - `tasks.md`: full-program sprint plan S0–S8 with gates.
 - `adrs.md`: ADR-001…010 as submitted plus ADR-011…019 from the review; all proposed pending acceptance.
 - `acceptance.md`: fixtures, acceptance tests, and open owner decisions.
+- `stage3-readiness.md`: the 12 release acceptance criteria dispositioned with cited evidence; the input package for the Stage 3 readiness review that gates enforced rollout.
 - `review.md`: review findings R1–R9; the amendments they produced are embodied in design v2 and the specs above.
 - `next-phase-plan.md`: repository-grounded immediate handoff (superseded in detail by `tasks.md` S0–S8).
 
