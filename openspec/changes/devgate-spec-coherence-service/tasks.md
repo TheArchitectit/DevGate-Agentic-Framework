@@ -973,6 +973,16 @@ sprints. Findings and dispositions:
       host patch cadence — recorded as out of scope for a repo-level control set. The doc remains
       factual in the existing style: every row cites its defeating test.
 - [ ] 100-repeat determinism suite per supported architecture per execution-profile equivalence promise.
+      **Measured 2026-09-26, host ucs03-class (linux/amd64):** `scripts/determinism_drill.py
+      --runs 100` → **PASS, 100/100 runs byte-identical** (decision sha256 3d0b8ccbd9ccefd2…;
+      stage-2 signing configuration with fixed stand-in credentials, so every byte including
+      attestations is covered). The drill itself predates this measurement; what this entry
+      adds is the 100-repeat hosted-adjacent evidence the CI step (30 runs) does not carry.
+      Scope note for the equivalence promise: the shipped registry has exactly one profile
+      (`linux-amd64-v1`, group "default"), so per-architecture coverage is complete **for the
+      shipped surface**; the arm64 half stays open until a second profile is registered and
+      the drill is re-run against it — the equivalence machinery already supports appending
+      one without further code (profiles.py equivalence-group validation, tasks.md:237).
 - [ ] Failure injection: missing specs, evaluator crash, denied egress, exhausted resources, bad signatures, evidence loss, input mutation mid-run.
       **Measured 2026-09-26.** 7 scenarios; 6 already carried by shipped, named tests — missing
       specs (`test_hub_coherence.py::…schema rejected`, container 44), evaluator crash →
