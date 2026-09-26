@@ -960,6 +960,18 @@ sprints. Findings and dispositions:
 ## Sprint S8 — hardening and release (submitted Phase 7)
 
 - [ ] Threat model + container escape review (evaluator boundary emphasis).
+      **Escape review shipped 2026-09-26** — `docs/threat-model.md` gains a dedicated
+      "Container escape review" section: ten escape vectors (root/exec, network, rootfs write,
+      mount write, unmounted-root read, symlink traversal, socket control-channel, resource
+      exhaustion as escape assist, image substitution), each with its in-place control and the
+      named launcher/container tests that pin it (`tests/test_hub_coherence_launcher.py`, 34
+      tests, verified green after the doc edit). Host-level facts measured the same day: both
+      runner hosts run rootless podman (`Rootless: true` on ucs03 and dell-u2) and the hub's
+      published ports bind only 127.0.0.1 + the tailnet IP, never 0.0.0.0 on the LAN interface.
+      Residual honestly named, not marketed as covered: no repo-owned seccomp profile beyond
+      podman's rootless default, no SELinux/AppArmor policy, kernel user-namespace breakouts are
+      host patch cadence — recorded as out of scope for a repo-level control set. The doc remains
+      factual in the existing style: every row cites its defeating test.
 - [ ] 100-repeat determinism suite per supported architecture per execution-profile equivalence promise.
 - [ ] Failure injection: missing specs, evaluator crash, denied egress, exhausted resources, bad signatures, evidence loss, input mutation mid-run.
       **Measured 2026-09-26.** 7 scenarios; 6 already carried by shipped, named tests — missing
