@@ -35,6 +35,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -304,6 +305,137 @@ class TestForeignVersionIsRefused(unittest.TestCase):
             parsed = json.loads((out / "result.json").read_text(encoding="utf-8"))
             self.assertEqual(parsed["decision"], "ERROR")
             self.assertIn("v2", json.dumps(parsed["error"]))
+
+
+class TestDeprecationPolicy(unittest.TestCase):
+    """S8:1020's deprecation half, measured 2026-09-26.
+
+    Before this slice the version consts let a breaking change be *named* but
+    not *scheduled*: nothing distinguished a retired contract version from one
+    that never existed, so an operator with a stale emitter got the same
+    generic "unsupported" line as a typo. The policy doc
+    (docs/runbooks/deprecation-and-compat.md) records the procedure and the
+    supported-versions table; `hub/coherence/compat.py` makes the gate able
+    to speak the distinction; these tests pin all three, including the two
+    ways each could rot silently.
+    """
+
+    CUR = "devgate.spec-coherence/v1"
+
+    def setUp(self):
+        from hub.coherence import compat
+        self._saved_registry = dict(compat._RETIRED)
+        self.addCleanup(setattr, compat, "_RETIRED", self._saved_registry)
+
+    def test_supported_versions_table_matches_the_machinery(self):
+        """The policy doc's supported-versions table is normative prose only
+        if it agrees with the gate. Parse the rows and check each against
+        compat: a `current` row must be what the build emits; a `retired`
+        row must be in the registry. Both directions — a table edit without
+        the registry (or vice versa) fails here."""
+        import re as _re
+        from hub.coherence import compat
+        doc = (REPO / "docs/runbooks/deprecation-and-compat.md").read_text(
+            encoding="utf-8")
+        rows = _re.findall(
+            r"^\| `([^`]+)`\s*\| (\w+)", doc, _re.MULTILINE)
+        assert rows, "policy doc's supported-versions table vanished"
+        statuses = {}
+        for version, status in rows:
+            statuses[version] = status.lower()
+        self.assertEqual(statuses.get(compat.current()), "current",
+                         "the emitted version must be tabled as current")
+        tabled_retired = {v for v, s in statuses.items() if s == "retired"}
+        self.assertEqual(tabled_retired, set(compat._RETIRED),
+                         "table and retirement registry disagree")
+        self.assertNotIn(compat.current(), tabled_retired,
+                         "a version cannot be both emitted and retired")
+
+    def test_current_version_classifies_as_current(self):
+        from hub.coherence import compat
+        self.assertEqual(compat.classify(self.CUR), ("current", ""))
+
+    def test_retired_version_is_distinguishable_from_a_never_existed_one(self):
+        """The slice's core promise, end-to-end through the real CLI: a
+        retired version fails with a reason that names its retirement date
+        and the upgrade direction; a never-existed version keeps the generic
+        unsupported line. An operator reading the envelope must be able to
+        tell 'my emitter is behind' from 'my emitter is broken'.
+
+        Driven in-process through the real gate (`__main__.run`): a retirement
+        registry edit is process memory, and a subprocess would import a
+        fresh module that never saw it — the subprocess form of this test
+        would silently test the generic refusal while the retired path sat
+        untested."""
+        from unittest import mock
+        from tests.fixtures.coherence import fixtures as fx
+        from hub.coherence import compat, __main__ as cli
+
+        with tempfile.TemporaryDirectory() as td:
+            out_root = Path(td)
+            req, out = fx.build_root(out_root, stage=1)
+            doc = json.loads(req.read_text(encoding="utf-8"))
+            retired = "devgate.spec-coherence/v0"
+
+            with mock.patch.object(cli, "SUPPORTED_API",
+                                   "devgate.spec-coherence/v2"), \
+                 mock.patch.object(compat, "current",
+                                   return_value="devgate.spec-coherence/v2"):
+                compat.retire(retired, retired_on=date(2026, 9, 1),
+                              note="superseded by v2")
+
+                doc["api_version"] = retired
+                _write_json(req, doc)
+                code = cli.run(str(req))
+                self.assertEqual(code, 40,
+                                 "retired version must still fail closed")
+                parsed = json.loads((out / "result.json").read_text(
+                    encoding="utf-8"))
+                reason = parsed["error"]["reason"]
+                self.assertEqual(parsed["error"]["class"], "protocol")
+                self.assertIn("retired on 2026-09-01", reason)
+                self.assertIn("upgrade the emitting side", reason)
+                # And the contrast case: a never-existed version does NOT
+                # carry the retired vocabulary.
+                doc["api_version"] = "devgate.spec-coherence/v42"
+                _write_json(req, doc)
+                code2 = cli.run(str(req))
+                self.assertEqual(code2, 40)
+                parsed2 = json.loads((out / "result.json").read_text(
+                    encoding="utf-8"))
+            self.assertNotIn("retired on", parsed2["error"]["reason"],
+                             "a never-existed version must not borrow the "
+                             "retired vocabulary — the distinction is the "
+                             "point of the slice")
+            self.assertIn("unsupported api_version", parsed2["error"]["reason"])
+
+    def test_retire_refuses_the_currently_emitted_version(self):
+        """Retirement is defined against a predecessor: you ship the
+        successor, then retire the old one. Turning the live contract off
+        via the registry would make the gate refuse its own emissions."""
+        from hub.coherence import compat
+        with self.assertRaises(ValueError):
+            compat.retire(self.CUR, retired_on=date(2026, 9, 1))
+
+    def test_retirement_registry_cannot_be_pinned_retroactively_dishonestly(self):
+        """A retirement record whose date lies (in the future) or whose
+        version is malformed must be refused: the registry is the evidence
+        trail the runbook triage reads."""
+        from hub.coherence import compat
+        from unittest import mock
+        with mock.patch.object(compat, "current",
+                               return_value="devgate.spec-coherence/v2"):
+            with self.assertRaises(ValueError):
+                compat.retire("devgate.spec-coherence/v1",
+                              retired_on=date(2030, 1, 1),
+                              note="dated in the future")
+            with self.assertRaises(ValueError):
+                compat.retire("not-a-version",
+                              retired_on=date(2026, 1, 1))
+            # A well-formed past retirement is accepted.
+            compat.retire("devgate.spec-coherence/v1",
+                          retired_on=date(2026, 1, 1), note="ok")
+            self.assertIn("devgate.spec-coherence/v1", compat._RETIRED)
 
 
 class TestStage2NoRegression(unittest.TestCase):

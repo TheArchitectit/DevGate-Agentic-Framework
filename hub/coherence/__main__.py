@@ -19,7 +19,7 @@ import sys
 from functools import lru_cache
 from pathlib import Path
 
-from . import (adoption, attest, container_exec, context, report,
+from . import (adoption, attest, compat, container_exec, context, report,
                evaluate, evidence, manifest, package, plan, policy, profiles,
                result, schemacheck)
 
@@ -96,11 +96,18 @@ def run(request_path: str) -> int:
         if not isinstance(req, dict):
             raise ValueError("request must be a JSON object")
         # Protocol guard before deep validation (coh-dec-04, exit 40): a
-        # foreign api_version must not be judged by this version's schema.
-        if req.get("api_version") != SUPPORTED_API:
+        # foreign or retired api_version must not be judged by this version's
+        # schema. Retired versions get their own reason (compat.retired_note)
+        # so the operator hears "past the deprecation window, upgrade the
+        # emitter" instead of the generic never-existed refusal.
+        status, detail = compat.classify(req.get("api_version"))
+        if status != "current":
+            reason = (compat.retired_note(req.get("api_version"))
+                      if status == "retired"
+                      else f"unsupported api_version {req.get('api_version')!r}; "
+                           f"supported: {SUPPORTED_API}")
             return _fail(_safe_out_dir(req, request_path), "protocol",
-                         f"unsupported api_version {req.get('api_version')!r}; "
-                         f"supported: {SUPPORTED_API}", "invocation", {})
+                         reason, "invocation", {})
         # Validate against the frozen request contract BEFORE any field is
         # touched (S3 runtime-schema item): structure, required fields,
         # inputRef shapes, semantics enum, outputs type. Replaces the piecemeal

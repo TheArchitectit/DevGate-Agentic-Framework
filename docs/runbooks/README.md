@@ -12,6 +12,7 @@ the runbook says so instead of describing an aspiration.
 | [evidence-and-attestation.md](./evidence-and-attestation.md) | verifying/transporting sealed decisions; tamper, substitution, partial upload | `tests/test_hub_coherence_store.py`; `scripts/determinism_drill.py` (100/100 byte-identical) |
 | [image-pin-and-protocol.md](./image-pin-and-protocol.md) | pinned-image drift (SKIPPED-not-pulled) and `api_version` mismatch (exit 40) | `tests/test_hub_coherence_exitcodes.py::ExitCodeMatrixTest::test_40_protocol`; `tests/test_hub_monitor_default_deny.py` |
 | [migration-fixed-name-to-per-runner-units.md](./migration-fixed-name-to-per-runner-units.md) | moving a host from fixed-name to per-runner units (`bfb7e99`) | `tests/mutation_battery_image_state.py`; `tests/test_runbook_claims.py` |
+| [deprecation-and-compat.md](./deprecation-and-compat.md) | wire-contract compatibility: supported versions, retirement procedure, retired-vs-foreign exit 40 | `tests/test_hub_coherence_compat.py`; `tests/test_runbook_claims.py` |
 
 ## Fast triage
 

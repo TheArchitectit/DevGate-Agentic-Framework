@@ -48,6 +48,10 @@ BEHAVIOR_HOMES = {
                             "TTL **and** retention"]),
     "protocol-mismatch": ("image-pin-and-protocol.md",
                           ['error.class: "protocol"', "exit 40", "SUPPORTED_API"]),
+    "deprecation-policy": ("deprecation-and-compat.md",
+                           ["Supported versions", "retired on",
+                            "upgrade the emitting side", "compat.retire(",
+                            "Pinned by"]),
 }
 
 # Codes result.py exports, as cited prose must match them exactly.
