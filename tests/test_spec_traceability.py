@@ -160,3 +160,23 @@ def test_zig_marker_counts_as_coverage(tmp_path):
     result = run(tmp_path, "--report")
     assert result.returncode == 0
     assert "router-req-01: covered" in result.stdout
+
+
+def test_module_constants_are_defined_exactly_once():
+    """F2 disposition (2026-09-26): 8c7556d shipped spec_traceability.py with
+    SCAN_EXTS/SCAN_SKIP/ID defined twice (the second block silently shadowing
+    the first) — a duplicated constant that must be kept in sync is exactly the
+    latent-bug class the author flagged and left "to keep the change
+    reviewable". Collapsed to one block here. The pin is source-shape, not
+    behavior: any constant redefined later in the module fails this test,
+    because a shadowed definition makes an edit to the first copy a silent
+    no-op — the same dead-code-lies-green shape as a gate that scans nothing."""
+    src = SCRIPT.read_text(encoding="utf-8")
+    for name in ("SCAN_EXTS", "SCAN_SKIP", "ID"):
+        assignments = [ln for ln in src.splitlines()
+                       if ln.startswith(f"{name} = ")]
+        assert len(assignments) == 1, (
+            f"{name} is defined {len(assignments)} times in "
+            f"{SCRIPT.name}: {assignments} — the later definition silently "
+            "shadows the earlier one, so an edit to the first copy is a "
+            "silent no-op")

@@ -30,14 +30,6 @@ MARKER = re.compile(r"(?://|#)\s*spec:[ \t]*([a-z0-9-]+(?:[ \t]*,[ \t]*[a-z0-9-]
 ID = re.compile(r"[a-z0-9-]+")
 SCAN_EXTS = {".rs", ".py", ".mjs", ".js", ".ts", ".sh", ".zig"}
 SCAN_SKIP = {"target", "node_modules", ".git", "openspec", ".devgate"}
-ID = re.compile(r"[a-z0-9-]+")
-# Shell scripts are part of the shipped gate surface: the specs negative
-# control that proves strict validation can refuse malformed material lives in
-# a .sh file. Without .sh here, a marker in that file is silently invisible and
-# its requirement reads UNCOVERED — coverage that looks asserted in the source
-# but is never counted.
-SCAN_EXTS = {".rs", ".py", ".mjs", ".js", ".ts", ".sh", ".zig"}
-SCAN_SKIP = {"target", "node_modules", ".git", "openspec", ".devgate"}
 
 
 def load_config(root: Path) -> dict:
