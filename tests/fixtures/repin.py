@@ -28,6 +28,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from tests.platform_caps import require_bash
+
 # The DevGate checkout this harness ships in. Named by parent-count, which is
 # exactly what broke when this file moved out of tests/ into tests/fixtures/:
 # the anchor silently became tests/, SCRIPT became
@@ -184,6 +186,7 @@ def env(repo: Path, binp: Path, **extra) -> dict:
 
 
 def run(repo: Path, binp: Path, **extra):
+    require_bash("the re-pin operation is a bash script")
     return subprocess.run(["bash", str(SCRIPT)], capture_output=True, text=True, encoding="utf-8", errors="replace",
                           cwd=str(REPO), env=env(repo, binp, **extra))
 

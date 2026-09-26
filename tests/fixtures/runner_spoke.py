@@ -25,6 +25,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from tests.platform_caps import require_bash, require_symlink
+
 # The DevGate checkout this harness ships in. Named by parent-count, which is a
 # stable anchor only while this file stays where it is — so it is checked
 # rather than trusted. The same move broke the re-pin harness one directory
@@ -228,6 +230,7 @@ class Spoke:
 
     # --- actions --------------------------------------------------------------
     def enroll(self, runner):
+        require_bash("runner enrollment runs scripts/runner-enroll.sh")
         return subprocess.run(
             ["bash", str(SCRIPT), HUB, "enroll-secret",
              "--repo", "owner/repo", "--runner-name", runner],
@@ -238,6 +241,7 @@ class Spoke:
         POSITIONAL after --revoke — `--runner-name` is the enroll-mode flag and
         sets a different variable, so a revoke test written with it would silently
         revoke the hostname-derived default."""
+        require_bash("runner revocation runs scripts/runner-enroll.sh")
         return subprocess.run(
             ["bash", str(SCRIPT), "--revoke", HUB, f"tok-{runner}", runner],
             env=self.env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
@@ -266,6 +270,7 @@ class Spoke:
         """Run the installed helper the way systemd would: env from the file."""
         helper = self.helper()
         assert helper.exists(), f"heartbeat helper was never installed: {helper}"
+        require_bash("the heartbeat helper is a shell script")
         return subprocess.run(["bash", str(helper)],
                               env=self._env_from_file(runner, extra_env),
                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
@@ -280,6 +285,7 @@ class Spoke:
         """
         helper = self.fleet_helper()
         assert helper.exists(), f"the sweep helper was never installed: {helper}"
+        require_bash("the fleet sweep helper is a shell script")
         return subprocess.run(
             ["bash", str(helper), "--declared", str(declared), *args],
             env=self._env_from_file(runner), capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -345,6 +351,12 @@ class Spoke:
         different root, to reach the mismatch branch), STUB_INFO_RC (a podman
         that fails, which is not the same fault as a mismatch).
         """
+        # The stub is a bash script placed on a PATH this fixture builds with
+        # POSIX separators, and the heartbeat invokes it by bare name. A host
+        # that cannot spawn an extensionless shebang script cannot run it, and
+        # the first element of a `;`-separated PATH is "C:" — so skip here
+        # rather than fail writing to a file called C:\podman.
+        require_bash("the podman stub is a bash script invoked by name on a POSIX PATH")
         p = Path(self.env["PATH"].split(":")[0]) / "podman"
         p.write_text(
             "#!/usr/bin/env bash\n"
@@ -376,6 +388,8 @@ class Spoke:
         branch stops being exercised and this test fails rather than passing
         for a different reason.
         """
+        require_bash("the tool sandbox is a POSIX PATH built from these tools")
+        require_symlink("the tool sandbox links each tool into a bare PATH")
         self.tools_dir.mkdir(exist_ok=True)
         for name in ("bash", "cat", "df", "python3", "sed", "tail", "tr"):
             link = self.tools_dir / name
