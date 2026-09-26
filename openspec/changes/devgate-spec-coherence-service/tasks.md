@@ -1133,14 +1133,16 @@ sprints. Findings and dispositions:
       doc's window, not a gate redesign.
 - [ ] SLOs: evaluation availability, maximum advisory age.
       **Measured 2026-09-26 — split into its two genuinely different halves.**
-      (1) *Maximum advisory age* is BUILT and blocked only on the number:
+      (1) *Maximum advisory age* is BUILT and the number is now SET:
       `stages.max_advisory_age_days` is in the policy schema,
       `report.advisory_age` measures it, `adoption.evaluate` enforces expiry
       per the ratified `advisory_escalation` model (8bf51d8), and the
       enforcement-side Stage-1-ordinal vs report-side disambiguation is
-      pinned. What remains is acceptance open-question #3 ("what maximum
-      advisory age is acceptable") — a policy number only the owner can set,
-      so this half is recorded as owner-blocked, not open work. (2)
+      pinned. Acceptance open-question #3 was **answered by the owner
+      2026-09-26** (Q3: 30 days, renewable once with owner + written reason +
+      control-plane approval) — and the machinery's fixture default already
+      enforced exactly 30, so no code change was needed; this half is
+      CLOSED. (2)
       *Evaluation availability* cannot be pinned today because the service
       cannot be measured: design.md §Observability commits to operational
       metrics (duration, resource use, cache behavior, evaluator failure
