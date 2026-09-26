@@ -279,6 +279,59 @@ Sprint work:
   → `dadfd1d8…` in two ordered commits. The gate's mechanism is unchanged and was re-run against the new record:
   anonymous pull by digest, schemas loaded from the fetched bytes. Detail and the ordering constraint are in
   `openspec/changes/add-runner-image-cycling/tasks.md` sprint 5, where the re-pin operation lives.
+  **S4 PUBLISH + RE-PIN EXECUTED 2026-09-26** (owner-authorized: "publish + re-pin now"). The S4 publish
+  dispatch (CI run 36276335042 @ a4ada9c, `workflow_dispatch` `publish=true`) built with `--timestamp 0`
+  and pushed `:main` + `:sha-a4ada9c01b3f` to ghcr; the publish job's own registry check read the SERVED
+  manifest digest `sha256:d798dc48d1cec73446bbc77459f8a3f1f32008b034bca172ea7ef59f155cc6a4` from
+  Docker-Content-Digest. Re-pin followed with `scripts/re-pin-evaluator-identity.sh` on the clean tree:
+  commit 1 = registry record (`ab88905`, digest → `d798dc48…`), commit 2 = template + `DEVGATE_PIN`
+  (`c9fcac7`, pin `ab88905c66848ba0c80c1e8cc463746770d1176c` = commit 1's sha). `REPIN_CHECK_ONLY=1`
+  passes: pin `ab88905c…` carries the pinned identity `d798dc48…`. Two operational facts from the run,
+  recorded because they cost an hour: (1) the workstation had **no podman at all**, so the script's
+  anonymous-pull guard died exit-127 — the guard itself worked exactly as designed (it refuses to record
+  an identity it cannot prove pullable); podman 6.1.1 installed via pacman, anonymous pull verified.
+  (2) ghcr's anonymous token endpoint returns 404 for `GET /manifests/<ref>` without a browser-like
+  Accept header set — `curl` bare gets 404 where the identical request with the OCI Accept headers gets
+  200 + Docker-Content-Digest; the script already sends them, which is why it works where ad-hoc probes
+  failed.
+  **REAL CONTAINERIZED GATE RUN 2026-09-26** — the NOT_RUN boundary above is now measured, on two hosts.
+  Subject: the synthetic stage-1 fixture tree from `tests/fixtures/coherence/fixtures.py::build_root`
+  (declared=approved `demo-widget`, stage 1, semantics fresh-promotion). Local workstation (podman
+  6.1.1 rootless) and ucs03 (podman 4.9.3) both executed the template's exact two commands — builder
+  (`python3 -m hub.coherence.invoke` emitting request.json + launch.json against the pinned digest) then
+  driver (`python3 -m hub.coherence --request … --launch-config …`), on ucs03 from a `git archive` of
+  the pinned commit c9fcac7. **Stage-1 result: decision PASS** on both hosts, `evaluator_image_digest`
+  = the pinned `d798dc48…`, `product.identity` SATISFIED, full evidence bundle emitted (result.json,
+  run-envelope.json, evidence-manifest.json, decision.claim.json + digest sidecar, staged
+  request.container.json). The in-container CLI ran the pinned image's bytes by digest ref with the
+  launcher's enforced flag set (network=none, read-only rootfs, non-root, cap-drop ALL).
+  **Two build gaps the real run surfaced — both NEW ledger entries below (the run did its job):**
+  (a) **stage-2 containerized runs cannot sign** — the driver's env passes only
+  `HUB_COHERENCE_EVALUATOR_IMAGE_DIGEST` (container_exec.py:161); `HUB_COHERENCE_SIGNER_KEY` and
+  companions never reach the container, so `attest.seal_run` (which runs INSIDE the container per the
+  sealing order) fails closed exit 33 `signer-key-not-configured`. Correct fail-closed behavior — but it
+  means no containerized run can ever produce a signed attestation today. Criterion 7's `--verify-run`
+  evidence is host-mode-only until this is built.
+  (b) **outputs-dir writability trap under rootless podman** — the launch config pins `user: 1000:1000`
+  (invoke.py default) but the outputs dir created by the host user is owned by host uid 1000, which under
+  rootless subuid mapping (container 1000 → host 100000) is NOT writable; the container falls back to
+  writing result.json into its own ephemeral /tmp and the error is easy to misread as a launcher bug.
+  Both hosts needed an explicit `chmod 777` on the outputs dir before the container could write. The
+  fallback message ("result written to fallback location: /tmp/…") names a path that vanishes with
+  `--rm` — it should say so.
+  **Hosted-run caveat, recorded because it will recur:** CI's `concurrency: cancel-in-progress` (ci.yml:39)
+  means a publish dispatch on main gets superseded by the next push's run mid-flight — run 36276335042's
+  own fw-\* and Test-suite jobs show `##[error]The operation was canceled` with the run conclusion
+  `cancelled` even though the publish job and every job that finished were green. A publish run will
+  therefore rarely read `completed/success` at the run level; the evidence to cite is the publish job's
+  conclusion + its `served digest:` notice, not the run-level flag. The follow-on push run (36276396249 @
+  58ec78d) — which also superseded the publish run — was fully green on every job that ran
+  (DevGate-gates-on-DevGate, Specs, Secret scan, coh-rt-08, Test suite all success; S4 correctly skipped
+  on a push event). The regression gate's dispatch-event failure in 36276335042
+  (`REGRESSION CHECK: NOTHING SCANNED — 0 changed files`, exit 2) is the `--fail-if-empty` zero-input
+  fail-safe tripping on a `workflow_dispatch` event, which has no `github.event.before` push range —
+  a known dispatch-event limitation of the CI step's BASE resolution (ci.yml:126-130), not a code
+  regression; the same commit's push run passed the same gate.
   MOVED OUT 2026-09-24 — the `:main` tag moves ahead of the recorded digest on every push (the publish job builds and
   pushes a fresh manifest each time; served `61170a5c…` vs recorded `f470110c…`, stable across two runs), and nothing
   fails when the tag and the record diverge. This is no longer a coherence-service item: it and the "nothing provisions
@@ -709,20 +762,21 @@ sprints. Findings and dispositions:
       form); `test_gate_invokes_the_service_from_the_pinned_clone` was re-pointed from pinning the broken
       `__main__.py` string to pinning the `-m` form AND asserting the `__main__.py` form is ABSENT (it
       certifies the fix and rejects the regression — a mutation reverting to `__main__.py` dies here).
-      **HONEST NOT_RUN boundary (this is why the line stays open).** The *containerized* path — running the
-      digest-pinned image with `--launch-config` — has NEVER executed here: there is no podman on this host, and
-      more fundamentally `COHERENCE_IMAGE_MANIFEST_DIGEST` / `execution-profiles.json` still point at the
-      pre-builder image, which does not yet contain `invoke.py` or the schema COPY. So the fix is proven in host
-      mode and by unit/structural tests; the real `run_containerized` execution is NOT_RUN, and the mocked
-      driver test (`test_builder_output_runs_containerized`) is a compose-check with `launcher.run` patched,
-      NOT a container run. Closing this line requires the publish-gated rebuild+re-pin below; recording it as
-      shipped without that run would repeat the exact NOT_RUN-as-pass error that let D2 survive CI.
-      **STILL OPEN:** (a) the re-pin — rebuild the schema+builder-bearing image on the fleet, refresh
-      `execution-profiles.json` + the template's `COHERENCE_IMAGE_MANIFEST_DIGEST` + `DEVGATE_PIN` together, then
-      run the real containerized gate; (b) `hub/config.py` currently has no `coherence_*_root` defaults, so the
-      three control-plane roots are env-only (Phase-3 hub fetch supersedes them). (c) was the local-developer half:
-      CLOSED 2026-09-22, two lines below.
-- [ ] Thin pinned CI invocation template + local developer command with byte-equivalent results (coh-int-01, coh-int-05).
+      **HONEST NOT_RUN boundary — CLOSED 2026-09-26.** The *containerized* path — running the
+      digest-pinned image with `--launch-config` — has NOW executed for real, on two hosts (workstation
+      podman 6.1.1 rootless + ucs03 podman 4.9.3), after the S4 publish + re-pin moved the identity to
+      `sha256:d798dc48…` / pin `ab88905c…` (full narrative at the image-build line above). The template's
+      exact two commands (builder then driver) produced a stage-1 `decision: PASS` with the complete
+      evidence bundle, evaluator digest = the pinned bytes. The mocked-driver test
+      (`test_builder_output_runs_containerized`) keeps its role as the fast regression control; the real
+      run is the hosted-grade evidence it never pretended to be.
+      **STILL OPEN (reduced):** (a) ~~the re-pin~~ — DONE 2026-09-26 (see above); (b) `hub/config.py`
+      still has no `coherence_*_root` defaults, so the three control-plane roots are env-only (Phase-3
+      hub fetch supersedes them); (c) was the local-developer half: CLOSED 2026-09-22, two lines below.
+      (d) **stage-2 signing inside the containerized path is a real build gap** the run surfaced — the
+      driver forwards only the evaluator-digest env, so `seal_run` inside the container always fails
+      closed exit 33 `signer-key-not-configured`; tracked as its own line below.
+- [x] Thin pinned CI invocation template + local developer command with byte-equivalent results (coh-int-01, coh-int-05). **CLOSED 2026-09-26** — re-pin done + real containerized PASS on two hosts (narrative below); stage-2 signing gap tracked separately.
       **Re-opened with round-18 D1/D3.** The earlier claim that "both paths are the SAME
       `python3 .devgate/hub/coherence/__main__.py` invocation, so equivalence is identity of command" was doubly
       wrong: that form is an `ImportError` (D3 — the image's own ENTRYPOINT is `python -m hub.coherence`), and
@@ -734,8 +788,14 @@ sprints. Findings and dispositions:
       schema-valid seven-field request, taking `policy.expected_digest` from the context's signed
       `policy_binding` rather than recomputing it from the policy bytes (recomputing would make the identity
       check a tautology — see design.md round-18 note).
-      STILL OPEN (this is the honest remainder): the re-pin half only — the **local-developer half** closed 2026-09-22
-      (`scripts/coherence-local` + `tests/test_coherence_local_wrapper.py`, disposition on the line below).
+      **CLOSED 2026-09-26.** The re-pin half is done (S4 publish dispatch 36276335042 → registry digest
+      `d798dc48…`; two-commit re-pin `ab88905`+`c9fcac7`; `REPIN_CHECK_ONLY=1` green) and the real
+      containerized gate run executed on two hosts with `decision: PASS` — the byte-equivalence-by-identity
+      claim now has its fleet-grade evidence: CI, `scripts/coherence-local`, and the ucs03 pinned-clone run
+      all executed the identical builder bytes from the identical digest-pinned image. Remaining half-open:
+      stage-2 signing in the containerized path (own line below). The local-developer half closed
+      2026-09-22 (`scripts/coherence-local` + `tests/test_coherence_local_wrapper.py`, disposition on the
+      line below).
 - [x] Local developer command `scripts/coherence-local` with a byte-equivalence test against the CI invocation (coh-int-01, coh-int-05). **NEW — carved out of the line above so the remaining work is a named item, not a buried clause.**
       **CLOSED 2026-09-22.** `scripts/coherence-local` (202 lines) runs the template's two invocations — builder then driver — and
       `tests/test_coherence_local_wrapper.py` (14 tests) pins "local == CI" as equality of the emitted bytes, not prose: the test
@@ -757,6 +817,8 @@ sprints. Findings and dispositions:
       hosted-red, caught by the runner exactly as the measurement discipline says it should be. Fixed by `update-index
       --chmod=+x` (bef225b; the negative-control script got the same treatment, b87f5d0 — nothing invoked it bare, so no
       hosted failure there). The `os.X_OK` assertion in the suite is what named the cause in one line; it was NOT a vacuous pin.
+- [ ] Stage-2 signing inside the containerized path: the signer secret never reaches the container (coh-ev-01, coh-rt-04). **NEW 2026-09-26 — surfaced by the first real containerized run.** `attest.seal_run` executes INSIDE the container (design.md:98 sealing order), so `HUB_COHERENCE_SIGNER_KEY` / `_KEY_ID` / `_IDENTITY` must be present in the container's environment for any Stage-2 fresh-promotion run to sign. The driver (`container_exec.run_containerized`) forwards only `HUB_COHERENCE_EVALUATOR_IMAGE_DIGEST` (container_exec.py:161) and the launch config carries no env field, so today every containerized Stage-2 run fails closed exit 33 `signer-key-not-configured` — measured on ucs03 (driver exit 33, error class `attestation`). The failure is correct fail-closed behavior; the gap is that no code path can ever satisfy it. The fix is a control-plane-secret plumbing decision: forward the signer env through the launcher's existing `env` kwarg (launcher.py:262-276 already supports it) with the redaction guarantees coh-rt-04 already enforces, or move the signing step host-side post-container — a design call to make with the escape review in hand (the secret would sit in a container env var visible via /proc inside the same isolation boundary the evaluator already controls). Until decided and built, criterion 7's signed-attestation evidence remains host-mode-only, and the containerized Stage-2 path is structurally ERROR — which the template currently treats as a run failure (correct).
+- [ ] Container outputs-dir writability under rootless podman: the launch `user: 1000:1000` is not the host's uid 1000 (coh-rt-01 operator surface). **NEW 2026-09-26 — surfaced by the same run.** Under rootless podman with a subuid map (container uid 1000 → host uid 100000), an outputs directory created by the host user (uid 1000, mode 755) is NOT writable by the container user; the in-container CLI falls back to `emit_with_fallback` and writes result.json into the container's own `/tmp` — a location that vanishes with `--rm`, with a message naming the ephemeral path. Both hosts (workstation, ucs03) needed an explicit `chmod 777` on the outputs dir before the container could write the bundle. Not a correctness bug (the contract holds: no silent pass, the run errored clearly), but an operator trap the template's `mkdir -p "$OUT"` will hit on any rootless self-hosted runner: the builder and driver run as the runner user, the container does not. Fix candidates: the template/`coherence-local` chmod the outputs dir explicitly, or the builder documents+checks the requirement, or the fallback message names the location as container-ephemeral. Record the failure signature in `docs/runbooks/image-pin-and-protocol.md`-adjacent triage: "result written to fallback location" + missing result.json on the host = outputs-dir uid mismatch, not a launcher bug.
 - [x] Inert image-contract guard (coh-rt-08): the CI job that holds "the evaluator image ships its frozen schemas"
       self-skips on runners without podman (`skipUnless` / `command -v podman … exit 0`), so on hosted runners the
       guard evaluates NOTHING and reports green — a NOT_RUN-as-pass (the exact pattern AGENTS.md forbids, and the
