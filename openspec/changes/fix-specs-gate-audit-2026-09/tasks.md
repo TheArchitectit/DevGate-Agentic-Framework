@@ -624,4 +624,8 @@ The Zig onboarding landed on main from a peer session (`8c7556d` + `7e73044` +
       message is honestly disclosed (Linux CI is the effective runner; the
       Windows failure census in 7e73044 is categorized, not waved away). The
       7e73044 cp1252/encoding sweep suggestion (30+ `text=True` sites without
-      explicit encoding) is queued-adjacent, not acted on here.
+      explicit encoding) is queued-adjacent, not acted on here — and measured
+      2026-09-26: the sweep already happened; this repo has **zero**
+      `text=True` sites without an explicit `encoding=` (both apparent hits in
+      `regression_check.py:114` and `test_runbook_claims.py:236` carry
+      `encoding="utf-8", errors="replace"` on the following line).
