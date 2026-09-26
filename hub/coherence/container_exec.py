@@ -155,10 +155,21 @@ def run_containerized(request_path: str, launch_cfg_path: str,
     # bytes (coh-rt-01), so the ref digest is the executed evaluator identity.
     eval_digest = ctx["image"].rsplit("@", 1)[1]
     ids = {"evaluator_image_digest": eval_digest}
+    # The signer secret is a control-plane credential (same category as
+    # attest.py, its only in-container reader): seal_run executes INSIDE the
+    # container per the sealing order, so without this forwarding no
+    # containerized Stage-2 run can ever sign. Forwarded only when the host
+    # actually holds the vars — omission stays the fail-closed default.
+    env = {"HUB_COHERENCE_EVALUATOR_IMAGE_DIGEST": eval_digest}
+    for _k in ("HUB_COHERENCE_SIGNER_KEY", "HUB_COHERENCE_SIGNER_KEY_ID",
+               "HUB_COHERENCE_SIGNER_IDENTITY"):
+        _v = os.environ.get(_k, "").strip()
+        if _v:
+            env[_k] = _v
     try:
         rr = launcher.run(ctx, output_dir=Path(host_out),
                           container_args=["--request", REQUEST_TARGET],
-                          env={"HUB_COHERENCE_EVALUATOR_IMAGE_DIGEST": eval_digest})
+                          env=env)
     except OSError as e:
         return _fail(host_out, "execution", f"launcher failed: {e}",
                      "evaluation", ids)

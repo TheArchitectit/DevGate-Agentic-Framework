@@ -45,10 +45,15 @@ class TestStaticDefaultDeny(unittest.TestCase):
         # retention.py retention key — none of them on the evaluation path)
         # and __main__.py (evaluator image digest env var for coh-dec-02)
         # touch the environment. Adding a module here is a deliberate
-        # security decision, not a convenience fix.
+        # security decision, not a convenience fix. container_exec.py joined
+        # 2026-09-26 (first real containerized run): it is the HOST-side
+        # driver and must forward the signer vars into the container, because
+        # seal_run executes inside it — without that forwarding no
+        # containerized Stage-2 run can ever sign. It forwards only the three
+        # named signer vars, only when the host holds them.
         for p in sorted((REPO / "hub/coherence").glob("*.py")):
             if p.name in ("issue.py", "attest.py", "retention.py",
-                          "__main__.py"):
+                          "__main__.py", "container_exec.py"):
                 continue
             self.assertNotIn("os.environ", p.read_text(encoding="utf-8"),
                              f"{p.name} reads the environment")

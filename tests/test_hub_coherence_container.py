@@ -312,6 +312,51 @@ class TestContainerExec(unittest.TestCase):
         self.assertEqual(rc, 32)
         self.assertIn("125", self._envelope()["error"]["reason"])
 
+    def test_signer_env_reaches_the_container(self):
+        # 2026-09-26 real-run finding: seal_run executes INSIDE the container,
+        # but the driver forwarded only the evaluator digest — every
+        # containerized Stage-2 run failed closed exit 33
+        # signer-key-not-configured with no code path able to satisfy it.
+        # The driver is a control-plane secret holder (same category as
+        # attest.py): it reads the signer vars host-side and forwards them.
+        captured = {}
+
+        def fake_run(ctx, *, output_dir, container_args, env=None):
+            captured.update(env or {})
+            (output_dir / "result.json").write_text('{"decision": "PASS"}',
+                                                    encoding="utf-8")
+            return LaunchRun(0, b"", "completed")
+
+        with mock.patch.dict(os.environ, {
+                "HUB_COHERENCE_SIGNER_KEY": "ab" * 32,
+                "HUB_COHERENCE_SIGNER_KEY_ID": "signer-9",
+                "HUB_COHERENCE_SIGNER_IDENTITY": "pilot-signer"}):
+            rc, _ = self._run(driver_request(), launch_cfg(), fake_run)
+        self.assertEqual(rc, 0)
+        self.assertEqual(captured.get("HUB_COHERENCE_SIGNER_KEY"), "ab" * 32)
+        self.assertEqual(captured.get("HUB_COHERENCE_SIGNER_KEY_ID"),
+                         "signer-9")
+        self.assertEqual(captured.get("HUB_COHERENCE_SIGNER_IDENTITY"),
+                         "pilot-signer")
+
+    def test_signer_env_absent_forward_nothing(self):
+        # Fail-closed by omission: with no signer env on the host, the
+        # container gets none (and an unset key still exits 33 inside —
+        # the attest.py contract, unchanged).
+        captured = {}
+
+        def fake_run(ctx, *, output_dir, container_args, env=None):
+            captured.update(env or {})
+            (output_dir / "result.json").write_text('{"decision": "PASS"}',
+                                                    encoding="utf-8")
+            return LaunchRun(0, b"", "completed")
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            rc, _ = self._run(driver_request(), launch_cfg(), fake_run)
+        self.assertEqual(rc, 0)
+        self.assertNotIn("HUB_COHERENCE_SIGNER_KEY", captured)
+        self.assertIn("HUB_COHERENCE_EVALUATOR_IMAGE_DIGEST", captured)
+
     def test_coherent_fail_relayed(self):
         def fake_run(ctx, *, output_dir, container_args, env=None):
             (output_dir / "result.json").write_text('{"decision": "FAIL"}', encoding="utf-8")
