@@ -989,6 +989,30 @@ sprints. Findings and dispositions:
       machinery exists so the first retirement is a data edit plus this
       doc's window, not a gate redesign.
 - [ ] SLOs: evaluation availability, maximum advisory age.
+      **Measured 2026-09-26 — split into its two genuinely different halves.**
+      (1) *Maximum advisory age* is BUILT and blocked only on the number:
+      `stages.max_advisory_age_days` is in the policy schema,
+      `report.advisory_age` measures it, `adoption.evaluate` enforces expiry
+      per the ratified `advisory_escalation` model (8bf51d8), and the
+      enforcement-side Stage-1-ordinal vs report-side disambiguation is
+      pinned. What remains is acceptance open-question #3 ("what maximum
+      advisory age is acceptable") — a policy number only the owner can set,
+      so this half is recorded as owner-blocked, not open work. (2)
+      *Evaluation availability* cannot be pinned today because the service
+      cannot be measured: design.md §Observability commits to operational
+      metrics (duration, resource use, cache behavior, evaluator failure
+      rate, advisory age, exception age, findings by class) with the
+      invariant "metrics never affect deterministic classification", but the
+      only signal that exists is `resource_limits.run_with_limits`'s
+      `duration_sec`, which nothing surfaces — no metrics in the result, no
+      report view, no fleet export. Building the metrics surface BEFORE an
+      SLO number would put the cart first: the SLO definition needs measured
+      baseline data from real fleet runs, which do not exist yet (the pilot
+      fixtures are still synthetic under R9). Disposition: the availability
+      half is properly an S6/S7-adjacent observability build + a
+      post-pilot baseline measurement, sequenced AFTER the first real
+      pilots (S8 line at :900); opening it now would invent a number without
+      data. Revisit when pilots produce real duration/failure distributions.
 - [ ] Runbooks: outage, rollback, policy recovery, key rotation, evaluator revocation.
       **Measured 2026-09-26.** Four of five scenarios are already covered by
       shipped, drill- or test-verified runbooks: outage (`hub-outage.md` +
