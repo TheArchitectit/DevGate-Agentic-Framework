@@ -30,6 +30,18 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from tests.platform_caps import has_fcntl  # noqa: E402
+
+# mutation_harness takes a POSIX advisory lock (fcntl) at import. Without this
+# the import raises ModuleNotFoundError during COLLECTION, which aborts the
+# whole run: on Windows `pytest tests/` reported one collection error and ran
+# none of the other thousand tests. A module-level skip is the difference
+# between "this file did not run here" and "the suite does not run here".
+if not has_fcntl():
+    pytest.skip("the mutation harness needs fcntl (POSIX advisory locks)",
+                allow_module_level=True)
 
 import mutation_harness as h  # noqa: E402
 
