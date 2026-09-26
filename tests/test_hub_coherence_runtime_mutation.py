@@ -17,6 +17,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from tests.platform_caps import (  # noqa: E402
+    require_case_sensitive_fs, require_symlink,
+)
 from hub.coherence import evaluate, manifest, result
 
 REPO = Path(__file__).resolve().parent.parent
@@ -128,6 +131,7 @@ class TestMidRunMutation(unittest.TestCase):
         # subject digest at resolution, not by this guard. Pinned in both
         # directions so a future "digest the symlinks too" change must
         # re-litigate this line, not silently drift from it.
+        require_symlink("the symlink policy boundary needs a symlink to exist")
         (self.root / "link").symlink_to("README.md")
         sm2 = manifest.build(str(self.root))
         (self.root / "link").unlink()
@@ -154,6 +158,13 @@ class TestMidRunMutation(unittest.TestCase):
         # A mutation that makes the tree ILLEGAL for re-walk (a casefold
         # collision) must relay as execution ERROR — an uncaught
         # SubjectError would crash the run instead of emitting an envelope.
+        # The collision is built by writing readme.md beside README.md: on a
+        # case-INSENSITIVE volume that second write silently replaces the
+        # first, the tree stays buildable, and the run reports the ordinary
+        # "input-mutation:README.md" instead (measured). The tree-unbuildable
+        # state cannot be constructed there, so the assertion cannot be made.
+        require_case_sensitive_fs(
+            "the unbuildable tree is built from a casefold collision")
         (self.root / "readme.md").write_text("plant", encoding="utf-8")
         out = self._run(_assertion_identity())
         self.assertIsNotNone(out["error"])

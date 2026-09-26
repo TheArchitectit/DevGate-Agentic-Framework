@@ -115,8 +115,23 @@ class TestCrashDecisionMatrix(unittest.TestCase):
         self.assertEqual(code, result.EXIT_EXECUTION)
         self.assertEqual(res["decision"], "ERROR")
         self.assertEqual(res["error"]["class"], "execution")
+        # The reason names the exception class the evaluator actually raised,
+        # and reading a DIRECTORY is what the crasher subject is. Which OSError
+        # that is depends on the host: POSIX answers IsADirectoryError (EISDIR),
+        # Windows answers PermissionError (EACCES on a directory handle). The
+        # envelope is right either way — it reports the crash that happened —
+        # so the expectation is derived from the host rather than pinned to one
+        # platform's spelling. A drift in the reason's SHAPE (missing class, a
+        # different evaluator id, a different separator) still fails here.
+        with tempfile.TemporaryDirectory() as td:
+            try:
+                (Path(td) / "d").mkdir()
+                (Path(td) / "d").read_text(encoding="utf-8")
+                raised = None
+            except OSError as e:
+                raised = type(e).__name__
         self.assertEqual(res["error"]["reason"],
-                         "evaluator-crash:IsADirectoryError:crasher")
+                         f"evaluator-crash:{raised}:crasher")
         # Both condition classes stay visible (tie-break 2).
         by_id = {r["assertion_id"]: r for r in res["assertion_results"]}
         self.assertEqual(by_id["crasher"]["outcome"], "UNRESOLVED")

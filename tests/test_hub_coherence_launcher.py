@@ -12,6 +12,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from tests.platform_caps import (  # noqa: E402
+    require_af_unix, require_posix_path_spelling, require_symlink,
+)
 from hub.coherence.launcher import (LaunchError, podman_args, run,
                                     validate_launch)
 
@@ -170,6 +173,7 @@ class TestLauncherValidation(unittest.TestCase):
         # Round-7 finding 5: socket binds are detected structurally
         # (S_ISSOCK), not lexically — the source here is a REAL Unix socket
         # whose name carries no .sock suffix.
+        require_af_unix("a real unix socket is the subject of this test")
         import socket
         td = Path(tempfile.mkdtemp(prefix="dg-sock-"))
         self.addCleanup(shutil.rmtree, td, ignore_errors=True)
@@ -214,6 +218,7 @@ class TestLauncherValidation(unittest.TestCase):
         # Round-7 finding 2: validation records the RESOLVED source, so the
         # validated context, the root-rewrite prefix match, and the podman
         # -v bind all share one path identity.
+        require_symlink("the resolution under test is a symlink source")
         import os
         td = Path(tempfile.mkdtemp(prefix="dg-sym-"))
         self.addCleanup(shutil.rmtree, td, ignore_errors=True)
@@ -336,6 +341,11 @@ class TestLauncherPodmanArgs(unittest.TestCase):
         # size; /dev/shm is pinned; there is NO scratch bind (tmpfs-only
         # scratch — a round-6 HIGH: duplicate /scratch destination made
         # every derived invocation unrunnable).
+        # The output bind is spelled from a HOST path, so what is asserted
+        # here is what the launcher would hand podman: on Windows that is
+        # '\tmp\out:/output', an argv no container runtime accepts.
+        require_posix_path_spelling(
+            "the derived podman argv must carry POSIX host paths")
         for target in ("/scratch:size=512000000,noexec,nodev",
                        "/tmp:size=512000000,noexec,nodev",
                        "/run:size=512000000,noexec,nodev"):
@@ -346,6 +356,11 @@ class TestLauncherPodmanArgs(unittest.TestCase):
                              "no host bind may target /scratch")
 
     def test_input_mounts_readonly_and_sorted(self):
+        # validate_launch normalizes each source through os.path.realpath, so
+        # the derived binds carry HOST path spelling (see the note in
+        # test_every_writable_target_is_bounded).
+        require_posix_path_spelling(
+            "the derived podman binds must carry POSIX host paths")
         cfg = base_cfg()
         cfg["mounts"] = [
             {"source": "/srv/b", "target": "/z", "readonly": True},

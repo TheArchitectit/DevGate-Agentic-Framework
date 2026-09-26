@@ -202,6 +202,25 @@ def require_long_command_line(what: str):
              "caps it at 32767, so the process is never created)")
 
 
+def has_posix_path_spelling() -> bool:
+    """Does this host spell and resolve paths the way a Linux runtime does?
+
+    The podman launcher derives `-v source:target` binds from HOST paths and
+    hands them to a container: on Windows os.path.realpath('/srv/a') answers
+    'C:\\srv\\a' and Path('/tmp/out') spells '\\tmp\\out', so the argv the
+    launcher builds is not the argv a container runtime would ever receive.
+    Measured rather than assumed — the two calls below are the product's own.
+    """
+    return str(Path("/a/b")) == "/a/b" and os.path.realpath("/srv/x") == "/srv/x"
+
+
+def require_posix_path_spelling(what: str):
+    if not has_posix_path_spelling():
+        skip(f"{what}: needs POSIX path spelling (this host resolves "
+             "'/srv/x' to a drive-lettered path, so the derived podman "
+             "arguments are not the ones a container runtime would see)")
+
+
 def has_resource_module() -> bool:
     """scripts/resource_audit.py measures child CPU with `resource` (POSIX)."""
     try:

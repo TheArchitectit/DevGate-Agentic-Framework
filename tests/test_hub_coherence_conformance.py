@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from tests.platform_caps import require_symlink  # noqa: E402
 from hub.coherence import result
 from tests.fixtures.coherence import fixtures as fx
 
@@ -346,6 +347,10 @@ class TestFixtureE_Nondeterminism(unittest.TestCase):
             with self.assertRaises(manifest.SubjectError) as c2:
                 manifest._check_safe("../escape.txt", root)
             self.assertIn("traversal", str(c2.exception))
+            # Guarded HERE, not at the top: layers one and two above are pure
+            # path arithmetic and must keep running on a host that cannot make
+            # a symlink. Only the third layer needs one.
+            require_symlink("the escaping-symlink layer of the traversal guard")
             outside = Path(td) / "outside"
             outside.mkdir()
             (outside / "secret.txt").write_text("s", encoding="utf-8")
@@ -357,6 +362,7 @@ class TestFixtureE_Nondeterminism(unittest.TestCase):
     def test_symlinked_directory_never_enters_manifest(self):
         """Escaping symlink must not contribute a digest.
         Round-2 audit finding 4."""
+        require_symlink("a symlinked directory is the subject of this test")
         from hub.coherence import manifest
         with tempfile.TemporaryDirectory() as td:
             root = Path(td) / "s"
@@ -377,6 +383,7 @@ class TestFixtureE_Nondeterminism(unittest.TestCase):
 
     def test_escaping_symlink_is_classified_as_escape(self):
         """Escape classified as symlink-escape, not symlink-forbidden."""
+        require_symlink("both symlink classifications need symlinks to exist")
         from hub.coherence import manifest
         with tempfile.TemporaryDirectory() as td:
             root = Path(td) / "s"

@@ -12,6 +12,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from tests.platform_caps import (  # noqa: E402
+    posix_readonly_dir, require_posix_readonly_dir,
+)
 from hub.coherence import result
 from tests.fixtures.coherence import fixtures as fx
 
@@ -76,6 +79,16 @@ class TestExitCodeSweep(unittest.TestCase):
 
     def test_33_evidence_error(self):
         """Sealing to an unwritable location raises EvidenceError (unit level)."""
+        # The location is /proc, which is a read-only mount on a POSIX host.
+        # Windows resolves the leading slash against the current drive, so
+        # "/proc/..." is C:\proc\... — a WRITABLE path. Measured: the seal
+        # succeeded there and left a real evidence tree at the drive root,
+        # which is both a false pass and a side effect on the developer's
+        # machine. On a host that does not refuse writes the way POSIX does,
+        # the assertion cannot be made honestly, so it skips.
+        require_posix_readonly_dir(
+            "the evidence seal must refuse an unwritable location (/proc is "
+            "read-only on POSIX; a Windows '/proc' is C:\\proc and is writable)")
         from hub.coherence import evidence
         findings = [{
             "assertion_id": "a1", "finding_key": "k", "outcome": "VIOLATED",
@@ -95,11 +108,19 @@ class TestExitCodeSweep(unittest.TestCase):
             base = Path(td)
             # (a) outputs is a regular file — cannot be a directory
             f = base / "afile"; f.write_text("x", encoding="utf-8")
-            # (b) outputs is read-only — cannot be written into
-            ro = base / "ro"; ro.mkdir(); os.chmod(ro, 0o555)
             # (c) outputs nested under a regular file — no such directory
             nested = base / "afile" / "sub"
-            cases = {"file": str(f), "readonly": str(ro), "nested": str(nested)}
+            cases = {"file": str(f), "nested": str(nested)}
+            # (b) outputs is read-only — cannot be written into. Only offered
+            # on a host that ENFORCES the mode bit: Windows maps a directory's
+            # read-only attribute to something that does not stop writes, so
+            # this shape is a writable directory there and the run exits 0
+            # (measured: "readonly: expected exit 33, got 0"). Constructing the
+            # shape anyway would be asserting a refusal the host cannot make.
+            ro = None
+            if posix_readonly_dir(base):
+                ro = base / "ro"; ro.mkdir(); os.chmod(ro, 0o555)
+                cases["readonly"] = str(ro)
             try:
                 for label, bad in cases.items():
                     req, _ = fx.build_root(base / label, stage=3,
@@ -120,7 +141,8 @@ class TestExitCodeSweep(unittest.TestCase):
                     self.assertIn("devgate-coherence-", p.stderr,
                                   f"{label}: fallback path not announced on stderr")
             finally:
-                os.chmod(ro, 0o755)
+                if ro is not None:
+                    os.chmod(ro, 0o755)
 
     def test_40_protocol(self):
         """Unsupported api_version -> exit 40, before any resolver runs."""
@@ -143,6 +165,13 @@ class TestEnvelopeHonestyIndep(unittest.TestCase):
         """Item 1: the fully-PASS shape has no findings, so the manifest write
         was the only seal write — and it was outside the try/except. The
         exit-33 battery only forced findings, which is why it stayed green."""
+        # The only shape this test uses is a chmod-enforced read-only outputs
+        # directory. Windows does not enforce the mode bit on directories, so
+        # the run is green there and the envelope is written normally: there
+        # is no equivalent unwritable shape to substitute without changing
+        # what the test is about (a zero-findings run, not a file-as-directory).
+        require_posix_readonly_dir(
+            "an unwritable outputs directory must actually refuse writes")
         with tempfile.TemporaryDirectory() as td:
             ro = Path(td) / "ro"; ro.mkdir(); os.chmod(ro, 0o555)
             try:

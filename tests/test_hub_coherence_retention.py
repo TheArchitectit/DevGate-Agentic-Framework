@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from tests.platform_caps import require_colon_in_filename  # noqa: E402
 from hub.coherence import retention
 
 FIXED = "2026-09-17T00:00:00Z"
@@ -175,6 +176,15 @@ class TestContentIntegrity(RetentionTestCase):
         """A retained bundle is only useful if it IS the input it claims:
         digest mismatch on read fails closed (the store may have been edited
         or corrupted), even when the token and window are valid."""
+        # The store addresses bundles as <root>/bundles/sha256:<hex>. On a host
+        # where ':' is a path-layer stream separator that name is an alternate
+        # data stream on a file called 'sha256': it writes, it lists as
+        # 'sha256', and is_file() on the full name is False — so read() answers
+        # retention-unknown for a bundle the store demonstrably holds (measured).
+        # The layout is the contract, so the test is the thing that cannot run
+        # here, not the layout.
+        require_colon_in_filename(
+            "the retention store names its bundles by digest ref")
         with tempfile.TemporaryDirectory() as td:
             root = Path(td) / "retention-store"
             ref = retention.retain(root, "sha256:" + "2" * 64, b"original",
