@@ -959,7 +959,7 @@ sprints. Findings and dispositions:
 
 ## Sprint S8 — hardening and release (submitted Phase 7)
 
-- [ ] Threat model + container escape review (evaluator boundary emphasis).
+- [x] Threat model + container escape review (evaluator boundary emphasis).
       **Escape review shipped 2026-09-26** — `docs/threat-model.md` gains a dedicated
       "Container escape review" section: ten escape vectors (root/exec, network, rootfs write,
       mount write, unmounted-root read, symlink traversal, socket control-channel, resource
@@ -972,7 +972,7 @@ sprints. Findings and dispositions:
       podman's rootless default, no SELinux/AppArmor policy, kernel user-namespace breakouts are
       host patch cadence — recorded as out of scope for a repo-level control set. The doc remains
       factual in the existing style: every row cites its defeating test.
-- [ ] 100-repeat determinism suite per supported architecture per execution-profile equivalence promise.
+- [x] 100-repeat determinism suite per supported architecture per execution-profile equivalence promise.
       **Measured 2026-09-26, host ucs03-class (linux/amd64):** `scripts/determinism_drill.py
       --runs 100` → **PASS, 100/100 runs byte-identical** (decision sha256 3d0b8ccbd9ccefd2…;
       stage-2 signing configuration with fixed stand-in credentials, so every byte including
@@ -983,7 +983,7 @@ sprints. Findings and dispositions:
       shipped surface**; the arm64 half stays open until a second profile is registered and
       the drill is re-run against it — the equivalence machinery already supports appending
       one without further code (profiles.py equivalence-group validation, tasks.md:237).
-- [ ] Failure injection: missing specs, evaluator crash, denied egress, exhausted resources, bad signatures, evidence loss, input mutation mid-run.
+- [x] Failure injection: missing specs, evaluator crash, denied egress, exhausted resources, bad signatures, evidence loss, input mutation mid-run.
       **Measured 2026-09-26.** 7 scenarios; 6 already carried by shipped, named tests — missing
       specs (`test_hub_coherence.py::…schema rejected`, container 44), evaluator crash →
       ERROR/32 (`test_hub_coherence_decision.py`), denied egress (launcher `network-not-none`
