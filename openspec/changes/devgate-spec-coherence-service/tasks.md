@@ -943,7 +943,7 @@ sprints. Findings and dispositions:
       (exclusions are recorded, never digested). (c) `first_mutation` re-walks under
       `DEFAULT_EXCLUDES`; a caller passing a custom `excludes` tuple to `build` would need the
       same tuple here — no such production caller exists today, noted rather than plumbed.
-- [ ] Compatibility + deprecation policy; schema versioning tests.
+- [x] Compatibility + deprecation policy; schema versioning tests.
       **Measured 2026-09-26.** Schema versioning was real but unpinned: every
       normative schema carried a version and the wire schemas were validated
       against emitted results, but nothing asserted that the family is
@@ -963,13 +963,31 @@ sprints. Findings and dispositions:
       two mutants survived the first cut (a vacuous glob, a reader that always
       returned None) and are now killed by named tests, which is the honest
       evidence that the anti-vacuity guards earn their place.
-      **Deprecation policy: still open, repo-side writable.** Nothing in the
-      codebase names a deprecation window, a supported-version range, or a
+      **Deprecation policy: closed 2026-09-26 (commit 53384ac).** Nothing in the
+      codebase had named a deprecation window, a supported-version range, or a
       removal procedure — the version consts let a breaking change be
-      *named*, not *scheduled*. The shape is a policy doc + a supported-versions
-      table + a test that a retired version fails with a distinguishable reason
-      (not the generic "unsupported"); none of it needs owner input, so it is
-      queued rather than deferred.
+      *named*, not *scheduled*. Now: `hub/coherence/compat.py` (the retirement
+      registry — `classify` routes current/retired/foreign; `retire` records a
+      retirement and refuses the currently emitted version, a malformed
+      version string, or a future-dated record); the gate's refusal branches
+      on it, so a retired version's envelope names its retirement date and
+      the upgrade direction while a never-existed version keeps the generic
+      line; `docs/runbooks/deprecation-and-compat.md` carries the
+      supported-versions table, the three-refusal-kinds map, and the four-step
+      procedure for the first real retirement (announce → window → retire →
+      evidence; the window lives in the fleet rollout, not the gate).
+      Pinned by `TestDeprecationPolicy` in `test_hub_coherence_compat.py` —
+      including the table-vs-registry equality test, which fails when the
+      policy doc and the code disagree in either direction — and a 2-mutant
+      battery (killed: the retired-reason branch dropped from the gate; the
+      refuse-current guard removed) with the byte-identical isoformat→str
+      control surviving. The end-to-end distinguishability test is
+      in-process through `__main__.run` on purpose: a retirement registry
+      edit is process memory, and the subprocess form would silently test
+      the generic refusal while the retired path sat untested. v1 remains
+      the only version, so the registry is empty by construction — the
+      machinery exists so the first retirement is a data edit plus this
+      doc's window, not a gate redesign.
 - [ ] SLOs: evaluation availability, maximum advisory age.
 - [ ] Runbooks: outage, rollback, policy recovery, key rotation, evaluator revocation.
 - [ ] Stage 3 readiness review before any enforced fleet rollout.
