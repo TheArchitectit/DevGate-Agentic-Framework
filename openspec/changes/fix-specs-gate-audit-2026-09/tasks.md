@@ -583,3 +583,45 @@ pin, in push order.
       heartbeat credential so token theft degrades to false-health, not
       fleet kill. Recorded with measurements, not acted on — touches live
       hosts and the mon-enroll-01 auth contract.
+
+## Zig gate-work review (2026-09-26) — another session's batch, audited here
+
+The Zig onboarding landed on main from a peer session (`8c7556d` + `7e73044` +
+`b4c1ec6`, Sep 25). Reviewed at the user's request; verdict and dispositions:
+
+- [x] **Confirmed sound (no action).** All three allowlists widened and the
+      two halves (extension + `*.zig` rules) shipped together; `7e73044`'s
+      size tests are MUST-flag, not presence checks; `cleanup()`'s
+      no-throw-retry fix ended a real suite-truncation bug; the `b4c1ec6`
+      battery re-point verified live (3/3 killed, 1/1 control survives, exit
+      0 — run this session); the coherence evaluator's `MARKER_EXTS` carries
+      `.zig`, so gate and evaluator agree.
+- [x] **F1 — Zig comments were scanned as code (FIXED, `ccc97a3`).** `.zig`
+      entered SOURCE_EXTENSIONS without entering `isCommentLine`'s extension
+      lists, so a `///` doc comment mentioning @panic/std.debug.print fired
+      PREVENT-Z-004/005. Measured with a fixture before fixing (fired on
+      pure-prose lines); RED-first test (section 16), fix, and a
+      `mutation_battery_zig_comment.py` (3/3 killed, control survives) that
+      runs through a NEW pytest bridge (`test_guardrails_scan_node.py`) —
+      the first battery run naming the raw .mjs reported "3/3 killed" against
+      a suite that never ran (pytest collects nothing from .mjs; exit 5 read
+      as a kill). That false-green shape is recorded as its own finding.
+      The battery also found isCommentLine's second includes(ext) block was
+      dead code (computed commentIdx/beforeComment, discarded both) — removed
+      with the fix rather than carried.
+- [x] **F2 — duplicated module constants (FIXED, `c073339`).**
+      `spec_traceability.py` defined SCAN_EXTS/SCAN_SKIP/ID twice, the second
+      shadowing the first — the exact latent bug 8c7556d flagged and left.
+      Collapsed to one block; pinned by
+      `test_module_constants_are_defined_exactly_once` (source-shape;
+      mutant-verified: re-adding a duplicate fails the pin).
+- [x] **F3 — recorded, not acted.** PREVENT-Z-003's `catch\s*\{\s*\}` cannot
+      match a multiline `catch {\n}`; acceptable for a line-oriented scanner,
+      but the net is narrower than the rule name implies. Z-004/Z-005 being
+      warnings means the F1 noise class trained ignore-habits while it
+      existed; F1 closes the generator.
+- [x] **F4 — recorded, no action.** The Windows node-suite hole in 8c7556d's
+      message is honestly disclosed (Linux CI is the effective runner; the
+      Windows failure census in 7e73044 is categorized, not waved away). The
+      7e73044 cp1252/encoding sweep suggestion (30+ `text=True` sites without
+      explicit encoding) is queued-adjacent, not acted on here.
