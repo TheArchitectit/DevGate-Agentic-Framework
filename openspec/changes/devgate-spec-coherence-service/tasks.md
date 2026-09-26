@@ -843,6 +843,21 @@ sprints. Findings and dispositions:
       (`devgate-runner-<spoke>.service` — the runners themselves, provisioned by the 2026-09-25
       two-tier rebalance, not by enroll). One host, many spokes, exactly the topology the line
       demanded; zero fixed-name legacy units remain on disk.
+      **(fleet-wide coverage, measured 2026-09-26)** all 14 ucs03 spokes now have `devgate-hb-*`
+      heartbeat units enrolled against the dell-u2 hub and firing on the 300 s timer — the four
+      originals (`ucs03-devgate`, `ucs03-gamerepo02`, `ucs03-openrawflow`, `ucs03-radgateway`)
+      plus ten enrolled this session (`ucs03-da`, `ucs03-game`, `ucs03-mc`, `ucs03-radical`,
+      `ucs03-radical-code`, `ucs03-redeye`, `ucs03-rtp`, `ucs03-zdf`, `ucs03-zombietoss`,
+      `ucs03-zxp`), each paired to its mapped repo at `/enroll` and each verified reporting via
+      the registry (`23/25` runners heartbeating; the two silent rows are stale pre-rebalance
+      entries). Operational notes for the next operator: (1) `/enroll` requires `repo` and the
+      field name `enrollment_token` — a request with `token` reads as a missing token and
+      answers `unknown_or_revoked_token`, which misdirects triage; (2) one-time tokens re-enter
+      the registry from `HUB_ENROLLMENT_TOKENS` on every restart, so consumed tokens must also
+      leave the env drop-in, and the leftover-free end state here is an empty env value with
+      zero stored tokens; (3) the ten enrollment-response heartbeat tokens were surfaced in an
+      operator transcript during a field-name misdiagnosis and were rotated at the registry
+      before any spoke unit consumed them — no unrotated copy exists on any spoke.
       No new code: the requirement's artifacts existed, tested, and running four days before this
       checkbox read them. What the closure adds is the citation trail so the next reader does not
       re-open it.
@@ -898,6 +913,36 @@ sprints. Findings and dispositions:
       — every one reported "killed, no survivors"), `gen_floors.py` "floors hold" (68 suites,
       1010 tests), openspec strict 36/36, silent-success OK, traceability unchanged 73/123.
 - [ ] Real pilots behind R9 provenance, now that fleet recon confirms the repos are real registered spokes: gamerepo01 (runner `ucs03-game` — was `dell-u2-game` before the 2026-09-25 two-tier rebalance; both it and `u85-game` are now offline), gamerepo02/LobsterWars (`ucs03-gamerepo02`, registered + online since 2026-09-25 — this closes the earlier "no runner behind the label" gap), and one clean repo; capture lineage/13-violation facts from the real repos with owner approval before labeling fixtures non-synthetic; Stage 2 ratchet demo blocks a new violation while named debt remains advisory.
+      **(all 14 ucs03 spokes now heartbeating, 2026-09-26)** the "registered + online" state this line
+      describes for gamerepo02 now holds fleet-wide: `ucs03-game` enrolled + heartbeating too, alongside
+      da/mc/radical/radical-code/redeye/rtp/zdf/zombietoss/zxp (see the coh-int-07 closure above). The
+      runner-behind-the-label gap is closed for the whole ucs03 fleet; what still blocks pilots is owner
+      approval for real-repo fact capture, not runner availability.
+
+**Private-repo hosted risk — evidence pass on the coherence template (2026-09-26):**
+- **Trigger surface**: `spec-coherence.yml` fires on `workflow_dispatch` + `push` to main only — no
+  `pull_request` trigger, so a fork's PR cannot invoke the gate or reach the enrolled runner through it.
+  (`pull_request` appears in five sibling templates, but all five default `runs-on: ubuntu-latest` and
+  only resolve a self-hosted label from the repo's own declared config, so the untrusted-run exposure is
+  a deploy-time choice, not a template default.)
+- **Token surface**: `permissions: contents: read` — least privilege, and nothing in the template reads
+  secrets; the only credential-adjacent value is the pinned image ref (public GHCR).
+- **Hub reachability from a hosted run**: the gate runs on an enrolled self-hosted runner, whose host
+  user can read the per-spoke env files (`devgate-heartbeat-<name>.env`, mode 600, owner-only) holding
+  live heartbeat tokens. A malicious workflow on such a runner could exfiltrate a spoke's heartbeat
+  token and forge heartbeats. This is inherent to self-hosted CI (any job on the host has host-user
+  power) and is the standing reason the template triggers only on push-to-main + dispatch: untrusted
+  code must never land on an enrolled host.
+- **Hub endpoint exposure**: 4 endpoints only — `/health` unauthenticated (counts, no names, no
+  tokens), `/enroll` + `/heartbeat` + `/revoke` token-gated. No context-serving endpoint exists yet
+  (Phase 3's authenticated hub fetch is unbuilt — the template's `COHERENCE_*_ROOT` vars are still
+  out-of-band provisioned paths), so there is nothing for an untrusted run to read from the hub beyond
+  what a stolen heartbeat token reaches (heartbeat posting + revocation of itself).
+- **Verdict**: no untrusted-reachable path exists in the template as shipped; the residual risk is the
+  self-hosted-runner-is-trusted-code assumption, which the push-only trigger policy enforces socially
+  rather than technically. Record for the Stage 3 readiness review: a technical enforcement (branch
+  protection on main + environment approval for the enrolled runner group) should be listed there
+  rather than improvised here.
 
 **Gate:** Stage 3 readiness review inputs complete. **Blocks:** enforced rollout.
 
